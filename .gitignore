@@ -1,0 +1,37 @@
+# User data, chosen environments and runtime/build artifacts
+**/__pycache__/
+**/.pytest_cache/
+**/*.py[cod]
+**/runtime/
+**/config/
+**/logs/
+**/cache/
+**/downloads/
+**/engines/
+**/Python/
+**/profile.json
+**/notebook.json
+**/startup-selection.json
+**/shared-runtime.json
+**/.env
+**/.env.*
+**/*.log
+**/*.jsonl
+**/*.db
+**/*.sqlite*
+**/.venv/
+**/venv/
+**/build/
+**/dist/
+**/*.exe
+**/*.dll
+**/*.pyd
+**/*.msi
+**/*.zip
+**/*.7z
+**/*.tar.*
+.idea/
+.vscode/
+release-assets/
+青简共享环境/
+# Two tiny audited bootstrap wheels are required source inputs, not caches.

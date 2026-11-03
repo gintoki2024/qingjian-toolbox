@@ -1,0 +1,10 @@
+{
+  "launcher_sha256": "5d80db283391ce1c8d678595e2a630e89b19152dc78fc4d921d32e16625ebcde",
+  "source_sha256": "fb57a95c0728cc7355967711df48965d984cf6b551d5176032535b955fbaaaf7",
+  "bytes": 54272,
+  "administrator_required": false,
+  "portable_launcher_sha256": "f89b8a974461685f3e701f0089748043b224a849822aabdc1552f6fd3699713f",
+  "portable_source_sha256": "aaca8df325cd42d1d83da43a8935cc66fcbc5713d84cd090f9af5aaadc664d5e",
+  "portable_bytes": 8192,
+  "builder_sha256": "258a63897530ca893b8abac553230e8c1da1887771b7fa862afe83b58f7276ef"
+}

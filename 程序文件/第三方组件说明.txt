@@ -1,0 +1,45 @@
+青简工具箱第三方组件
+
+本工具的自有源代码采用 MIT 许可。第三方库分别适用自身许可，详见本目录所附文本与组件版本.json。
+轻量源码另附red-black-tree-mod 1.22和win-unicode-console 0.5两个MIT许可的纯Python wheel，用于首次安装时补齐只发布源码的间接依赖。原Python模块不修改，许可文本位于wheel内；固定上游来源、源码与wheel的大小/SHA256、许可来源及重建方式详见bootstrap-wheels.json、bootstrap_wheels/说明.txt和launcher中的重建脚本。
+不修改 LibreOffice、Qt、PDFium 或 Python 的上游代码。采用目录版动态库部署，保留库文件，便于替换相应组件。
+
+主要来源与源码：
+Python： https://www.python.org/ ； https://github.com/python/cpython
+PySide6 / Qt： https://doc.qt.io/qtforpython-6/ ； https://code.qt.io/cgit/pyside/pyside-setup.git/
+Qt 源码归档： https://download.qt.io/official_releases/qt/
+LibreOffice： https://www.libreoffice.org/ ； https://download.documentfoundation.org/libreoffice/src/
+python-docx： https://github.com/python-openxml/python-docx
+Pillow： https://github.com/python-pillow/Pillow
+pdfplumber： https://github.com/jsvine/pdfplumber
+pdfminer.six： https://github.com/pdfminer/pdfminer.six
+pypdfium2 / PDFium： https://github.com/pypdfium2-team/pypdfium2 ； https://pdfium.googlesource.com/pdfium/
+Requests： https://github.com/psf/requests
+Beautiful Soup： https://www.crummy.com/software/BeautifulSoup/
+openpyxl： https://openpyxl.readthedocs.io/ ； https://foss.heptapod.net/openpyxl/openpyxl
+pypdf： https://github.com/py-pdf/pypdf
+ReportLab： https://www.reportlab.com/ ； https://hg.reportlab.com/hg-public/reportlab/ （本地PDF封面、目录、页码及水印生成）
+lunar_python： https://github.com/6tail/lunar-python （MIT，1.4.8；源码随包提供未修改的离线农历/节气算法，来源及固定摘要见lunar_python/来源.json，许可见lunar_python/LICENSE.txt）
+PyInstaller bootloader： https://github.com/pyinstaller/pyinstaller （上游提供分发例外）
+
+本发行包自带 LibreOffice 完整许可说明；Qt/PySide 使用其开放许可，库以可替换文件形式随包附带。
+对组件进行修改、重新分发或商业部署时，请保留相关版权、许可及适用的源码提供安排。
+
+0.9.0格式扩展组件
+python-pptx：https://github.com/scanny/python-pptx （MIT）
+markdown-it-py：https://github.com/executablebooks/markdown-it-py （MIT）
+pillow-heif / libheif：https://github.com/bigcat88/pillow_heif ；https://github.com/strukturag/libheif （依组件许可证分别列示）
+extract-msg：https://github.com/TeamMsgExtractor/msg-extractor （GPL-3.0，及其解析依赖许可证）
+PyYAML：https://github.com/yaml/pyyaml （MIT）
+tomli-w：https://github.com/hukkin/tomli-w （MIT）
+vobject：https://github.com/py-vobject/vobject （Apache-2.0）
+icalendar：https://github.com/collective/icalendar （BSD）
+7-Zip：https://www.7-zip.org/ （LGPL及unRAR限制等，保留发行包内完整许可）
+Ghostscript：https://ghostscript.com/ （AGPL；程序作为独立可替换的命令行引擎运行，保留上游许可和对应源码归档）
+OFDRW：https://github.com/ofdrw/ofdrw （Apache-2.0；Maven依赖适用各自许可）
+Eclipse Temurin Java：https://adoptium.net/ （GPL-2.0 with Classpath Exception；jlink运行时附legal）
+
+完整运行包的support保存组件固定版本、来源和校验记录，并附7zip/Ghostscript对应源码归档、OFD桥源码和重建说明。轻量源码保留桥、小型许可和来源/源码地址清单，启动按native-sources.json补齐运行组件，不携带大型上游源码归档。完整包的licenses记录构建环境组件版本与许可证，原生组件说明位于support。自有源代码许可不能替代第三方组件许可，衍生分发请遵循各组件文本。
+界面参考Filee的浮动转换交互理念；本工具为独立Python/Qt实现，未复制Filee源代码或图形资源。参考项目：https://github.com/WDHUS4G/Filee
+
+tomli：https://github.com/hukkin/tomli （MIT，兼容 Python 3.10 的 TOML 读取）

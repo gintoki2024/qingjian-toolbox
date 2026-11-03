@@ -1,0 +1,24 @@
+OFD 离线转换组件
+
+运行：本目录自带经 jlink 精简的 Eclipse Temurin Java 21、OFD Reader & Writer 2.5.1 及其依赖。
+不需要安装系统 Java、配置 PATH、连接云端服务或使用本地 GPU。
+外层青简工具箱验证文件后调用 bridge.jar。用户日常使用无需操作此目录。
+
+已提供方向：OFD→PDF/TXT；PDF/TXT/图片→OFD。OFD→PNG/JPG 由程序在本地经 PDF 页面渲染完成。
+转换生成新的外观或文字副本，不延续原文件的电子签名效力；字体、复杂图形可能变化。
+文字提取只读取已有文字，不做 OCR。PDF 附件不复制到 OFD。
+
+source/ 保存青简 Java 桥的完整源码、固定版本 pom.xml 与构建脚本。
+sources/ 保存 Java 运行时和 Maven 运行依赖对应的上游源码归档。
+licenses/ 保存每个运行依赖的许可证、NOTICE 与 POM 元数据；runtime/legal/ 和 runtime/NOTICE 保存 Java 的上游声明。
+library-origins.json、source-origins.json 与 build-info.json 记录来源、版本和 SHA-256。
+
+重建需要本地 Python、Windows x64 JDK 21 和 Maven（构建工具不参与用户日常运行）。
+在 source/ 目录运行以下形式的命令，将示例路径改为实际目录：
+  python build_bridge.py --jdk D:\构建工具\jdk-21 --maven D:\构建工具\maven --work D:\青简构建缓存 --output D:\青简OFD重建结果
+首次 Maven 构建需下载固定版本依赖；之后可用相同本地仓库构建。
+脚本不覆盖现有输出目录，不进行系统安装，不修改系统或用户级 PATH。
+
+上游项目：
+https://github.com/ofdrw/ofdrw （MIT）
+https://adoptium.net/ （GPL-2.0 WITH Classpath-exception-2.0，具体见随包法律声明）

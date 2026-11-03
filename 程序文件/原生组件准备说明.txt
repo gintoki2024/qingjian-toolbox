@@ -1,0 +1,22 @@
+轻量源码的离线转换组件准备
+
+1. 轻量源码仅包含应用源码、4.7 KB 左右的 OFD 桥文件、桥源码、许可材料，以及 native-sources.json 固定版本下载/校验清单。不包含大型运行时、上游源码归档和下载缓存。
+
+2. 根启动器选定 Python 和部署位置后，自检并补齐 Python 依赖、LibreOffice，以及以下原生组件：7-Zip 26.05、Ghostscript 10.08.0、Temurin JRE 21.0.13+9、OFDRW 2.5.1 及其固定版本依赖。只下载已列出的成品 JRE 和 37 个 JAR；不会下载 JDK/Maven，不会在用户机器上编译，也不会进行系统级安装或修改系统 PATH。
+
+3. 优先复用随包组件、所选位置内已经准备的组件、相邻的青简完整运行包，以及字节校验一致的已安装 7-Zip/Ghostscript。已有组件不重复下载。下载缓存位于所选位置的 cache，原生组件位于 native；临时解包、配置准备和日志均跟随所选位置。准备成功后可以离线使用。
+
+4. 每个下载均使用 HTTPS，并同时校验固定大小和 SHA256；通过校验后才解包或使用。MSI 只读解析，Ghostscript 安装程序作为压缩数据解开，安装程序本身不执行。Java ZIP 只提取清单中指定的普通文件。各组件先在独立临时目录验证，完整成功后才启用。下载或启动失败会保留已校验缓存，重新启动可继续补齐；原有文件不会被静默覆盖。
+
+5. 已于 2026-11-02 全量下载并核对官方/备用文件的 SHA256：
+   - 7-Zip：github.com/ip7z/7zip 官方发布；mirrors.nju.edu.cn/github-release/ip7z/7zip 南京大学镜像备用。
+   - OFD 的 37 个依赖 JAR：repo.maven.apache.org/maven2 官方；maven.aliyun.com/repository/central 阿里云 Maven 镜像备用。
+   - Java JRE：github.com/adoptium/temurin21-binaries 官方；ghfast.top 的 GitHub 下载加速备用。
+   - Ghostscript：github.com/ArtifexSoftware/ghostpdl-downloads 官方；ghfast.top 的 GitHub 下载加速备用。
+   完整固定版本地址、文件大小和校验值以 native-sources.json 为准。共 40 个下载文件，官方/备用 80 份完整下载均已核验，不以网页返回成功替代内容校验。
+
+6. Java/Ghostscript 的“GitHub 下载加速备用”并非大陆静态镜像，不代表所有公司网络一定可达。清华/北外可以列出相应 JRE 目录，但本次二进制下载返回 403，未列入已核验清单。各源仍保留证书校验；全部源失败时会明确报告并允许稍后重试，不要求用户另行取得第三种组件包。
+
+7. 许可与来源：support 下保留对应许可，OFD/library-origins.json 和 source-origins.json 记录依赖及上游源码地址。完整运行包另含原生运行组件与对应源码归档；轻量源码不再携带这些大型归档。获取第三方源码可按来源清单下载；重建桥所需源码在 support/OFD/source。第三方许可不由本工具的自有代码许可替代。
+
+开发接口：bootstrap.py 在导入图形界面之前调用 startup_native.check_native/ensure_native。准备结果通过仅用于该进程的 QINGJIAN_NATIVE_COMPONENTS JSON 对象传递，键为 7zip、Ghostscript、OFD，值为经过清单校验的组件绝对目录。冻结的完整运行包忽略该变量，始终使用包内 support。准备时使用共享的 preparation_lock，避免同一部署位置出现并发写入。

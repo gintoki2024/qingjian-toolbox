@@ -1,0 +1,230 @@
+[
+  {
+    "file": "OpenJDK21U-jdk-sources_21.0.13_9.tar.gz",
+    "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jdk-sources_21.0.13_9.tar.gz",
+    "sha256": "b5232c9980d8a0f0459676c084c41c6e2c771ed9e785890b03c6a438406ad1ca",
+    "bytes": 115231532
+  },
+  {
+    "file": "batik-src-1.19.tar.gz",
+    "url": "https://archive.apache.org/dist/xmlgraphics/batik/source/batik-src-1.19.tar.gz",
+    "sha256": "dbb8fa989e1167706f55bf9d757925d4cecd43007557954ab3b23037bfff1fb8",
+    "bytes": 13927127
+  },
+  {
+    "file": "bcpkix-jdk18on-1.85-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/bouncycastle/bcpkix-jdk18on/1.85/bcpkix-jdk18on-1.85-sources.jar",
+    "sha256": "e5331f467331aba29bda6ddfb0df0da6d568928e29c2b0f20ea2fe123d802d20",
+    "bytes": 928504
+  },
+  {
+    "file": "bcprov-jdk18on-1.85-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/bouncycastle/bcprov-jdk18on/1.85/bcprov-jdk18on-1.85-sources.jar",
+    "sha256": "fa5a81c8b91f299712edcf917788f6293482240a46ec6d095ac6512ae257f007",
+    "bytes": 5940653
+  },
+  {
+    "file": "bcutil-jdk18on-1.85-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/bouncycastle/bcutil-jdk18on/1.85/bcutil-jdk18on-1.85-sources.jar",
+    "sha256": "b470a692878f92abf00b9c3af9147a45453250a80930df8f23f1d092c55e2d5e",
+    "bytes": 534652
+  },
+  {
+    "file": "common-image-3.13.0-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/com/twelvemonkeys/common/common-image/3.13.0/common-image-3.13.0-sources.jar",
+    "sha256": "f6774cf7e8ab875b170a414aceefb72fd0863f4f989961629d1cb3aa253e207d",
+    "bytes": 95469
+  },
+  {
+    "file": "common-io-3.13.0-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/com/twelvemonkeys/common/common-io/3.13.0/common-io-3.13.0-sources.jar",
+    "sha256": "3e12d6340079dc3f835e1801ae1db188fad36a7c7db590ca334b2eb2934c888f",
+    "bytes": 126837
+  },
+  {
+    "file": "common-lang-3.13.0-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/com/twelvemonkeys/common/common-lang/3.13.0/common-lang-3.13.0-sources.jar",
+    "sha256": "907b22c541a5ed9b8916d528f07b06c92461a4790d7f72caf74b7e084728dd52",
+    "bytes": 134876
+  },
+  {
+    "file": "commons-codec-1.19.0-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/commons-codec/commons-codec/1.19.0/commons-codec-1.19.0-sources.jar",
+    "sha256": "b0462142585d45fc15bc8091b7b02f1e3a85c83595068659548c82cac9cdc7a2",
+    "bytes": 375253
+  },
+  {
+    "file": "commons-compress-1.28.0-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/apache/commons/commons-compress/1.28.0/commons-compress-1.28.0-sources.jar",
+    "sha256": "6de9de4559f12bba6d41789c72f6a2a424514f2d2a3f7f49e2a3c52414db9632",
+    "bytes": 937891
+  },
+  {
+    "file": "commons-io-2.16.1-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/commons-io/commons-io/2.16.1/commons-io-2.16.1-sources.jar",
+    "sha256": "fcfe84e39fb44e38a0ea0ab0815b53adea6fff89c7b72535bc42495f400cb9a1",
+    "bytes": 527696
+  },
+  {
+    "file": "commons-lang3-3.18.0-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0-sources.jar",
+    "sha256": "b15732a13e40df7f07c30f2cb8572874798e8dde581f1398943d2ad3765bafaa",
+    "bytes": 750845
+  },
+  {
+    "file": "commons-logging-1.4.0-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/commons-logging/commons-logging/1.4.0/commons-logging-1.4.0-sources.jar",
+    "sha256": "28104e5057a11c6e9cda72e973d767b3a0185e65363fede91bc848bc6a309634",
+    "bytes": 85970
+  },
+  {
+    "file": "dom4j-2.1.4-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/dom4j/dom4j/2.1.4/dom4j-2.1.4-sources.jar",
+    "sha256": "7c9764c17d9db06b550c726ff4476a2d8670b7258f41bb29d43fa37bc8b26b0f",
+    "bytes": 424340
+  },
+  {
+    "file": "fontbox-3.0.8-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/apache/pdfbox/fontbox/3.0.8/fontbox-3.0.8-sources.jar",
+    "sha256": "ccb9a570f102b776974dd3ab5a5dd96972c90e2dd30cd3e9ecc59d854f1dc1b0",
+    "bytes": 1570814
+  },
+  {
+    "file": "imageio-core-3.13.0-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/com/twelvemonkeys/imageio/imageio-core/3.13.0/imageio-core-3.13.0-sources.jar",
+    "sha256": "ec7644bacccb19ae44d8c6c72c0a3ad4ce7ded6dcaea837e3f5f710b4594942d",
+    "bytes": 117789
+  },
+  {
+    "file": "imageio-metadata-3.13.0-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/com/twelvemonkeys/imageio/imageio-metadata/3.13.0/imageio-metadata-3.13.0-sources.jar",
+    "sha256": "6a7c2aca7bf3409135e800f24f51221bf85ef38c75495f2191e52714aa7dce7c",
+    "bytes": 97740
+  },
+  {
+    "file": "imageio-tiff-3.13.0-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/com/twelvemonkeys/imageio/imageio-tiff/3.13.0/imageio-tiff-3.13.0-sources.jar",
+    "sha256": "be0910b9167a4a807bea4288a65c49f99784a48bfeb1c5563b8c3d3c4cc49fec",
+    "bytes": 123627
+  },
+  {
+    "file": "jaxen-1.2.0-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/jaxen/jaxen/1.2.0/jaxen-1.2.0-sources.jar",
+    "sha256": "b028d7872b7cb61b2b3a9227c2f8bd83a180a3550a3e8d6cc6d5e3afd39ca94b",
+    "bytes": 396902
+  },
+  {
+    "file": "jbig2-imageio-3.0.5-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/apache/pdfbox/jbig2-imageio/3.0.5/jbig2-imageio-3.0.5-sources.jar",
+    "sha256": "54a5e7cb8a8427ee62fa6ed51ce3e774fea94c87ffee602702bd2ca5b38894b9",
+    "bytes": 144339
+  },
+  {
+    "file": "json-20141113-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/json/json/20141113/json-20141113-sources.jar",
+    "sha256": "56b561f4c4d09d6b8f1099bc70dcb960cff1b2e234ee19492311c7cbe44afc65",
+    "bytes": 75132
+  },
+  {
+    "file": "ofdrw-converter-2.5.1-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/ofdrw/ofdrw-converter/2.5.1/ofdrw-converter-2.5.1-sources.jar",
+    "sha256": "907cb3f80dd62a425def4b6c6d48e56c3ae44bde14938b3e213161e92fdf307e",
+    "bytes": 527232
+  },
+  {
+    "file": "ofdrw-core-2.5.1-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/ofdrw/ofdrw-core/2.5.1/ofdrw-core-2.5.1-sources.jar",
+    "sha256": "f99e258ef6c8d00352da9ec05aa87a29295210ec82b22b2b352a7db673a61f67",
+    "bytes": 203061
+  },
+  {
+    "file": "ofdrw-font-2.5.1-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/ofdrw/ofdrw-font/2.5.1/ofdrw-font-2.5.1-sources.jar",
+    "sha256": "e7253eae24c29d3c0c18b82a3ad9aaa06c04d0eb9221e22e76f825ae246dc45b",
+    "bytes": 83092
+  },
+  {
+    "file": "ofdrw-gm-2.5.1-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/ofdrw/ofdrw-gm/2.5.1/ofdrw-gm-2.5.1-sources.jar",
+    "sha256": "4ff492dd38eb07c6d85271997c0a00c542850d34911c915b169aa3f03a7bec3d",
+    "bytes": 59789
+  },
+  {
+    "file": "ofdrw-graphics2d-2.5.1-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/ofdrw/ofdrw-graphics2d/2.5.1/ofdrw-graphics2d-2.5.1-sources.jar",
+    "sha256": "93423880f33b0dcbb9724b7eeefdc0c148a9e8510437d08dab2635275c3113f2",
+    "bytes": 25475
+  },
+  {
+    "file": "ofdrw-gv-2.5.1-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/ofdrw/ofdrw-gv/2.5.1/ofdrw-gv-2.5.1-sources.jar",
+    "sha256": "b55ec283e6cc73a26407c0bc042287132a3c0c6faa0eb6d48fbb9b74a41461d0",
+    "bytes": 1994
+  },
+  {
+    "file": "ofdrw-layout-2.5.1-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/ofdrw/ofdrw-layout/2.5.1/ofdrw-layout-2.5.1-sources.jar",
+    "sha256": "72022f4cfa111a3d5b3543fc04215d875a9fc6ab389aef781568fbe5f64ef1a5",
+    "bytes": 137699
+  },
+  {
+    "file": "ofdrw-pkg-2.5.1-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/ofdrw/ofdrw-pkg/2.5.1/ofdrw-pkg-2.5.1-sources.jar",
+    "sha256": "792a47f94770a6bd805f869f9036af44e38a676722458f3c9ab859d6b62ee122",
+    "bytes": 28147
+  },
+  {
+    "file": "ofdrw-reader-2.5.1-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/ofdrw/ofdrw-reader/2.5.1/ofdrw-reader-2.5.1-sources.jar",
+    "sha256": "2c58d27c4f2bc132a7e8be78509b4c8c8531581762498001ddff44a356e16d6a",
+    "bytes": 53982
+  },
+  {
+    "file": "pdfbox-3.0.8-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/apache/pdfbox/pdfbox/3.0.8/pdfbox-3.0.8-sources.jar",
+    "sha256": "eaed642d27599c78229857e4ab571805979f828f5ec8c695e3135ca933766132",
+    "bytes": 1855792
+  },
+  {
+    "file": "pdfbox-io-3.0.8-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/apache/pdfbox/pdfbox-io/3.0.8/pdfbox-io-3.0.8-sources.jar",
+    "sha256": "c0ce16d1ea7b2e68607741e43b2ea14a2e9193eb7a2b344853c4c64b397fb250",
+    "bytes": 49627
+  },
+  {
+    "file": "slf4j-api-1.7.36-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36-sources.jar",
+    "sha256": "15bc04357a3725b7a5153f132db71379f95e83b7b8590a86cc6d4ad77bfc150a",
+    "bytes": 57747
+  },
+  {
+    "file": "ujmp-core-0.3.0-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/ujmp/ujmp-core/0.3.0/ujmp-core-0.3.0-sources.jar",
+    "sha256": "25602f2d44b64e9560eb47bd59c516795140ad7a2a353da5fff5ba78a2078270",
+    "bytes": 1252506
+  },
+  {
+    "file": "xml-apis-1.4.01-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/xml-apis/xml-apis/1.4.01/xml-apis-1.4.01-sources.jar",
+    "sha256": "5db8b94589e334283e01075458cfae920995e37ab997cb3b475fd0667b3158b2",
+    "bytes": 656529
+  },
+  {
+    "file": "xml-commons-external-1.3.04-src.tar.gz",
+    "url": "https://archive.apache.org/dist/xml/commons/source/xml-commons-external-1.3.04-src.tar.gz",
+    "sha256": "8e8a412aeb95644eaf14ec1a5cfd04833e38cac4a01b83d73d7de2368a35a597",
+    "bytes": 345726
+  },
+  {
+    "file": "xmlgraphics-commons-2.11-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/org/apache/xmlgraphics/xmlgraphics-commons/2.11/xmlgraphics-commons-2.11-sources.jar",
+    "sha256": "7b4e4a6ccee5bcf95573352acd219ec509525153c342c1b1c1b032e51b7db90c",
+    "bytes": 704698
+  },
+  {
+    "file": "zip4j-2.11.3-sources.jar",
+    "url": "https://repo.maven.apache.org/maven2/net/lingala/zip4j/zip4j/2.11.3/zip4j-2.11.3-sources.jar",
+    "sha256": "a2b98127366ffe12bca9248c7e8b7cf44458d2f3aacba6cc626fcf82a0685614",
+    "bytes": 129366
+  }
+]

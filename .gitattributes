@@ -1,0 +1,2 @@
+# Preserve startup/build hash contracts, including historical source bytes.
+* -text

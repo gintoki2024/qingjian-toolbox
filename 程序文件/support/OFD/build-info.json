@@ -1,0 +1,18 @@
+{
+  "java": "openjdk version \"21.0.13\" 2026-10-20 LTS\nOpenJDK Runtime Environment Temurin-21.0.13+9 (build 21.0.13+9-LTS)\nOpenJDK 64-Bit Server VM Temurin-21.0.13+9 (build 21.0.13+9-LTS, mixed mode)\n",
+  "modules": [
+    "java.base",
+    "java.desktop",
+    "java.logging",
+    "java.xml",
+    "java.naming",
+    "java.management",
+    "jdk.crypto.ec",
+    "jdk.unsupported",
+    "jdk.charsets"
+  ],
+  "bridge_source_sha256": "b95e5ad63d6d1f6a27be69434a085bf171aaa99a37112d4e01e3b0d0cfcd6f22",
+  "bridge_sha256": "b9f6d8797e5e3d48a68393a320c6242d69ca3649c20761a1c8dca35946995319",
+  "libraries": 37,
+  "offline": true
+}

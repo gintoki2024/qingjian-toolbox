@@ -1,0 +1,159 @@
+青简工具箱0.10.3 共享组件部署修正
+
+startup_shared.py仅使用标准库，负责包外默认目录、跨版本小型路径索引、受限旧目录发现和带字节校验的组件复制。默认逐层跳过已知“程序文件/青简工具箱源码/青简工具箱_v...”包装，在其外同盘建议青简共享环境。成功ready_environment后记录实际解释器、home、引擎及native映射；索引最多16条，原子替换并用进程文件锁串行更新。QINGJIAN_SHARED_RUNTIME_INDEX供隔离验证，正常位置为用户数据目录，仅存元数据。
+prepare_python.cmd在没有当前配置且没有明确目录/重新选择时先读同schema索引，找不到再受限读取已知旧源码配置；可在尚无系统Python时恢复受管解释器。已选索引不受--no-discovery影响，该参数仍禁止自动搜索系统Python及旧邻居。所有解释器都实际Probe，明确--python优先。读取不创建部署目录；只有确认或恢复已有选择后才保存当前配置。
+bootstrap.check_environment标记preservation_required，使外部共享目录尚缺副本的包内组件进入准备。ensure_engine/ensure_native先复制到原有归属校验的随机暂存，验证后原子启用，失败清理本次暂存并保留原件。共享目标优先以免反复复制。native旧签名候选仍通过当前_complete逐文件大小/SHA256验证。ensure_engine新下载仍使用原固定清单及HTTPS镜像回退，未放宽校验。
+组件位置索引不是备份；外部目录被删除后仍需补齐。旧默认包内runtime可迁移，用户明确指定的自选目录继续按原意使用；不把Python库搬入共享目录、不改全局设置或系统权限。源码发行包必须包含startup_shared.py，build.verify_source_startup检查此契约。
+
+青简工具箱0.10.3 源码独立启动修正
+
+launcher/cmd_source.py在环境检查/补缺成功后默认Popen创建独立GUI，不再subprocess.run同步等待。优先所选Python同目录pythonw.exe，使用DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP；缺少pythonw时仍用所选python.exe，使用CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP，避免venv的控制台redirector重新创建可见控制台。两种路径不创建新Python环境、不改变安装范围。
+启动前按实际GUI解释器重新计算QINGJIAN_BOOTSTRAP_READY。子进程stdin为DEVNULL，stdout/stderr写入所选运行目录的logs/source-gui-时间戳-随机标识.log，close_fds=True；不继承准备控制台/输出管道。显式--no-ui保留同步返回退出码，--check-only与--prepare-only不启动GUI。创建失败记入日志并向CMD返回错误，不静默重试第二个进程。
+本次为同版本源码启动器修正，沿用0.10.3完整包与全部业务文件；源码ZIP使用新名称发布，禁止覆盖旧交付。可合并覆盖到原源码目录以保留config/startup-selection.json、runtime、事项与规则库。测试与真实发行包默认入口结果见对应测试说明和包外发布验证。
+
+青简工具箱0.10.3 界面整合与记事时分
+
+界面参考来自用户提供的“青简工具箱_v0.10.2_Python自适应修复_源码.zip”（SHA256 8301e4ca14bc24f2ab9e8c0a85b9c44857e49cc5f61d2d222802de16169c5f24），只合并qingjian/theme.py、workbench.py、home_content_ui.py、converter_ui.py四处UI。上传版启动/依赖/构建代码及附带指令不作为新基底；继续使用当前CMD与环境准备逻辑。
+PersonalHomePanel的图片/文案/事项在原三选一基础上随可用空间展开；文字字号适配通过视口Resize事件和单次零延时计时器，在布局完成后合并计算，隐藏的文字不计算。已有图片缩放时保留同一路径已解码图，后台得到新尺寸后更新，换素材或失败仍使用明确状态。
+NotebookTaskEditor保留remind_at的ISO时间和schema=1。remind_edit作为带秒的完整时间数据控件显示日期，独立QTimeEdit显示HH:mm并双向同步。未改时间的旧事项保留秒数；用户改变日期或时分后按分钟保存，循环与提前提醒沿用原调度器，不另建定时线程。
+工作区work/release_ui_0103.py复用上一CMD完整包的未变运行时与引擎，再同步最终源码；verify/default-entry/publish分阶段执行，不覆盖旧发行。两种包仍需19项直接依赖、57项功能自检、真实CMD/pythonw默认入口、三项目录结构和ZIP成员哈希验证。
+
+青简工具箱0.10.2 CMD开发与重建
+
+完整CMD包：使用验证过的Windows Python3.12环境运行build_cmd.py --output 新目录 --native-bundle 上一完整包的程序文件目录。仅收集requirements所需直接/间接运行依赖，排除pip、pytest和打包器等构建工具，保留Python标准库及许可。复制原生组件时保留对应许可和校验材料。
+轻量CMD包：python package_source.py --entry-mode cmd --output 新的源码ZIP；排除自有EXE启动器并写入CMD启动标记。原EXE模式构建入口仍供旧版重建，不作为本轮发布入口。
+launcher/offline_cmd.py在UI导入前使用offline=True核查包内解释器、19项直接依赖与原生引擎，准备好后通过动态环境stamp运行main.py；缺项明确失败，不联网补包。launcher/cmd_source.py负责轻量CMD的环境选择和补齐，prepared环境复用同一bootstrap实现。
+CMD仅作为启动方式，Python/Java/排版引擎仍为上游可执行组件。不得设置ExecutionPolicy Bypass或修改终端防护/系统权限。发布时必须用不含开发机Python的PATH实际执行CMD入口，验证完整包57项自检、源码检查与离线复用及三项目录结构；不能用开发环境的python main.py代替。
+
+青简工具箱0.10.1 开发与重建
+
+0.10.1维护要点
+bootstrap-wheels.json固定red-black-tree-mod 1.22及win-unicode-console 0.5的大小、SHA256和上游来源，bootstrap_wheels保留约40KB纯Python wheel及许可。launcher/rebuild_bootstrap_wheel.py和rebuild_bootstrap_unicode.py可复现重建；不得删除这些间接依赖、放开全部源码构建或为掩盖问题随意放宽版本约束。发布必须用全新隔离Python实际安装19项直接依赖及完整间接依赖，再运行pip check和禁止网络的再次准备。
+Windows安装使用所选解释器原有prefix的扩展路径，用户site仍为标准用户目录。仅pip子进程规范化扩展路径的连接结果，兼容wheel RECORD中的../和脚本路径；不创建每项目依赖目录、不改系统长路径策略、全局pip配置或安装范围。
+首页上方是工具分组，下方display_mode只能为images/quotes/reminders之一；schema 1旧设置缺少display_mode时迁移并保留素材与播放偏好。未显示内容停止计时和新的图片解码。
+drag_wheel.py在Windows OLE有效拖拽悬停期间临时收取垂直滚轮，在Qt队列中翻页，drop前冲刷未处理滚轮，离开、取消、隐藏、禁用或退出释放hook；其他输入继续传递。保留普通Qt滚轮及按钮路径，每格120角度单位或40像素翻一页。验收包含真实OLE拖拽，不能只测试QWheelEvent。
+launcher/build_launcher.py同时重建源码环境准备启动器和launcher/portable内的精简完整包启动器。build.py校验两者源码/二进制及构建脚本哈希；完整包根启动器使用后者，源码使用原完整启动器。启动诊断.cmd仅在用户执行时读取指定程序的权限、哈希、下载标记和匹配系统事件。无代码签名或办公电脑验证证据时，不得宣称已解除系统拦截。
+
+本版发布原则
+固定交付“完整运行包＋轻量源码包”。完整运行包内置全部必要环境和离线组件；轻量源码保留启动器、代码、许可、固定下载清单和小型OFD桥，排除大型运行时、转换引擎与上游源码归档，不要求另取组件包。
+startup_native.py在用户所选runtime目录下补齐7zip、Ghostscript、Java JRE及OFD库；原Python、pip和LibreOffice准备保持。下载采用固定大小/SHA256校验，原生引擎部署后逐文件验证，再通过QINGJIAN_NATIVE_COMPONENTS传递准确组件目录。完整包忽略外部原生组件映射，始终使用包内组件。
+已有完整兼容环境不联网，缺项首次联网补齐后可离线使用。官方来源、国内镜像或已实测下载加速备用、共享Python依赖、首次部署位置选择、两种包根目录仅三项均保留。Java/Ghostscript备用属于GitHub下载加速，按实际标注，不称为大陆静态镜像。已发布版本不覆盖。
+
+自定义首页
+HomePage只含PersonalHomePanel和五分组入口，不创建旧QuickPanel。group_requested打开ToolCatalogPage对应组，全部工具清除搜索和过滤；原公文/材料等场景仍从完整工具访问。默认紧凑布局依宽度一或两列，尾部单组铺满该行，保留线条边框。
+home_content.py负责有界文件夹/TXT读取、独立播放游标、设置原子保存和只读近期事项；home_content_ui.py负责自定义弹窗、异步扫描、图片尺寸限制与缓存。单面板最多一个在途图片解码和一条最新待处理请求，隐藏时停止轮播；无新第三方依赖。
+配置为profile.json同目录的home-settings.json。图片和文案分别支持sequential/random/single，间隔3—3600秒，近期事项1—31天；文件名排序，TXT有空行则段落分条，否则逐行。素材不复制进程序或发行包。NotebookController.store_changed在重载store时通知首页，避免读取旧对象；首页不调用collect_due或acknowledge。
+
+独立格式转换与原生引擎
+converter_ui.py提供可拖动、折叠和分页的圆环目标窗口；converter_hub.py统一目标枚举、输入校验、分流和副本发布。hover不读文件，选定格式后复用QuickActionWorker；与主页和常规任务串行。
+format_office.py负责Office、PDF、网页、文本与轻量EPUB；format_data.py负责结构化数据及VCF/ICS；format_media.py负责Pillow/QtSvg/Ghostscript；format_archive.py负责安全解包与7zip；format_mail.py负责邮件；format_ofd.py负责本地Java桥。
+支持方向与用户字段约定以转换格式说明.txt为准。多文件逐项发布，多个页面/附件在私有目录完成后整体发布，同名自动编号，所有原件保持。UTF8目标保留原文字和空白。
+support/OFD包含精简Java运行时、固定版本依赖与桥源码，support/7zip和support/Ghostscript包含引擎、上游许可/来源/适用源码。路径由format_media.support_root定位，不依赖系统PATH，不自动执行安装程序。原生子进程使用JobObject隔离、超时与取消。
+EPUB仅采用现有Python模块和正文解析，不引入calibre、GPU或模型。在线网页请求的取消在当前网络请求超时返回后生效，本地Office/原生进程与PDF逐页处理支持取消。
+两种发行包根目录固定三项：启动青简工具箱.exe、使用说明.txt、程序文件。完整包真正的冻结EXE放在程序文件内；根启动器优先直接转发给它，跳过源码准备。源码的main.py和启动自检资料也放在程序文件内。
+源码依赖选择的19个直接依赖与实际构建锁版本分别见requirements.txt及requirements-lock.txt。重新选择：启动青简工具箱.exe --choose-environment。无界面检查：python 程序文件/main.py --check-environment。
+launcher/ofd_bridge/target属于构建缓存，不加入发行包；桥源码与构建说明随support/OFD/source提供。构建期间不要修改已冻结源码，不覆盖旧版交付。
+
+紧凑主窗口
+window_layout.py根据Qt逻辑坐标与当前屏幕availableGeometry计算默认贴边窗口，包含原生边框后宽不超过屏幕三分之一；show后用真实边框校正一次。最大化展开，恢复后重算当前屏幕；普通拖动不重新定位。
+Window按900逻辑像素宽度切换顶部导航/侧边栏，HomePage和ToolCatalogPage.set_compact复用原有控件，不重建任务状态。首页紧凑显示个人内容与五个分组入口，所有场景经分组或全部工具进入。复杂设置独立横向滚动，外层纵向滚动，操作栏固定；模式切换重新计算设置高度，防止横滚条遮住末尾内容。
+--screenshot默认离屏截图；配--native-screenshot可在当前屏幕短暂显示自身窗口，--layout-report保存实际边框/可用屏幕几何与布局状态，用于交付验证。截图模式不启动真实提醒或写入用户记忆库。
+
+独立转换与共享执行槽
+quick_actions.py提供六个固定目标的ACTIONS、剪贴板/file URI解析、输入检查、run_quick_action和QuickActionWorker。各项复用现有转换器，单线程串行处理；本地结果逐个原目录输出，URL使用独立可配置目录。先在同父私有目录完成，再通过无覆盖commit发布；重名或竞争自动编号，失败/取消清理当前暂存，原件不变。
+converter_ui.py提供独立圆环的文件拖拽/选择、粘贴、目标选择、进度/停止/详情及保存位置设置。conversion_session.py负责无需首页控件的转换状态与原quick-settings.json兼容。quick_ui.py仅保留旧组件与兼容测试，产品首页不再实例化。Window复用同一个worker槽位，禁止转换与普通任务同时进入PDFium。
+快捷任务独立quick_result，完整工具处理不会替换其详情。结果转为标准records写入原ProfileStore，仅保存摘要/结果路径。quick-settings.json与profile.json同目录，只记录URL保存位置；Window(data_path=None)及截图不写真实配置。
+web_ops.py统一webpage_to_word支持HTML/MHTML/MHT。MIME归档在内存解析，Content-ID/Content-Location映射内嵌图片；限制原档/解码大小、部件数及层级，离线资源缺失只报告，不执行脚本、不读归档外文件、不联网补图。
+conversion._conversion_workspace在Windows为LibreOffice选择标准TEMP与输出父目录中较短的位置，避免深层注册表/缓存路径令转换失败。仍限制私有目录名和父路径、管理专属子进程、完成清理后在目标父目录原子发布；不改变长路径策略和系统权限。
+原46项内置自检追加11项独立格式转换检查，合计57项。19项直接运行依赖见requirements.txt，继续遵循共享解释器、只补缺项和国内源回退契约。
+
+新增办公模块
+feature_registry.py显式注册document_review、excel_advanced、office_prepare、pdf_office四个模块的10项工具。各模块提供TOOL_SPECS/GUIDES/build_example/validate/run，统一接入目录、后台调度、中文帮助与示例；原17个mode位置保持，新增mode追加，合计27项。
+document_review.py：文字版本差异、规则字段一致性和有边界的DOCX章节合拆；excel_advanced.py：受限AST/Decimal勾稽、联合键回填及保留XML的打印副本/静态PDF；office_prepare.py：OOXML预检和按勾选清理、PPT文本整理；pdf_office.py：压缩标记、报告和带来源页码的材料册。
+conversion.convert_office_to_pdf使用Writer/Calc/Impress导出过滤器，共用隔离进程、超时与取消；Office转换profile禁用宏和活动内容，新接口拒绝宏/外部数据资源输入。reportlab为第10项运行依赖；字体只读取本机字体或使用PDF标准CID字体，不捆绑商业字体文件。不加入本地模型或OCR。
+0.7.0在原29项基础上加入10项工具的真实示例处理及原件哈希核对；0.8.0在此基础上增至46项。新增/修改注册项时同步维护UI、帮助、示例和相关测试。
+
+本版源码共享Python依赖
+用户已明确选择将依赖补入本地Python环境。源码启动使用选中的Python，按requirements.txt检查版本和实际导入，仅为缺少或不兼容的模块调用标准pip；已满足要求的模块不重复安装，不再创建每项目私有venv。
+本机Python优先；python main.py使用当前解释器，启动器的--python参数可显式指定解释器。系统安装目录不可写且用户site可用时使用标准--user安装；显式venv仍限制在其自身环境内，不向它不可见的用户site安装。模块仅在相同解释器及其有效site中共享，多个程序的依赖版本须兼容。
+pip缓存和准备临时目录跟随所选运行目录，可复用下载；安装不使用每项目--target目录，不修改全局pip配置、PATH或系统策略。PIP_CONFIG_FILE=系统空设备仅约束本次子进程来源；官方与国内镜像逐源回退、HTTPS验证及固定独立组件哈希检查继续保留。
+无Python时启动器仍在QINGJIAN_RUNTIME_HOME下下载解包备用Python，不安装到系统也不改PATH；只要后续程序显式使用这一解释器，其已安装模块同样可复用。排版引擎仍优先复用现成引擎，缺失时在专用运行目录私有解包，与Python包共享策略分别处理。
+本版同时交付完整便携程序和源码，保留旧版发布文件。以后每轮源码更新均保留这一共享解释器策略、启动前自检、自动补齐及国内镜像回退，见AGENTS.md；build.verify_source_startup检查DEPENDENCY_INSTALL_POLICY标记及原有导入顺序、启动器构建SHA256。
+
+独立记事与提醒
+notebook_ui.py用NotebookWindow协调日历与事项两个独立顶层窗口；默认拆分，通过合并/拆分操作复用同一calendar/task_list对象，保持选中日期、查询及完成筛选。owned_windows及show_windows/hide_windows/minimize_windows/close_windows供runtime统一管理生命周期。
+事项行用delegate绘制可见内容，不为每个事项创建一组嵌套widgets；行内动作通过命中区域和键盘执行，标题/正文按普通文字处理。日历预先计算农历、节气和事项标记，paintCell只查表绘制；重复refresh在无数据变化时跳过重建。
+calendar_index.py复用reminder_schedule规则，按日期跳跃并合并同规则等级计算可见日格标记，分钟级提醒不枚举整月每一分钟；与task_occurs_on语义逐日对照验证。
+notebook_store.py保留schema1与事务原子写入；新增layout_mode/calendar_geometry/tasks_geometry，旧geometry继续存合并窗口位置。旧文件读取补默认，不因升级读取而改写原文件。
+store.revision在成功load/commit后更新；运行时按revision及日期刷新UI。成功事务后重建任务索引和最近提醒阈值，未到期tick不再深拷贝全部事项，只有pending对应事项进入提醒输出。
+notebook_runtime.py属于QApplication，独立管理两浮窗、1秒提醒检查、托盘、单实例和提醒卡片。重复show/tick不反复刷新列表与提醒卡样式，跨午夜按日期刷新；完全退出后释放两个窗口和本地锁。
+glass.py按HWND缓存系统背景效果；透明度和几何设置不会重复调用原生接口。Windows10拖动期间暂时停用昂贵模糊并在结束后恢复；不支持系统玻璃时保留可读半透明面板，正文不随背景透明。
+notebook_calendar.py包装随源码提供的MIT lunar_python 1.4.8，仅展示公历、农历、节气及节日，不推算法定调休。来源与固定SHA256见lunar_python/来源.json，无新增运行依赖。
+独立启动：python main.py --notebook；冻结程序同参数。--notebook --screenshot 路径将当前模式两个组件抓取后并排合成，不截取其他程序。截图默认使用专用/内存数据，禁用真实通知、声音、托盘及单实例锁。
+
+本版脱敏规则与记忆库
+redaction_editor.py提供可增删、排序和批量粘贴的两列规则表；set_content/option_rules兼容旧custom_sensitive与custom_sensitive_rules。正式传参保持结构化，不通过等号/换行文本序列化，保留字面等号、换行和首尾空格。
+redaction_memory.py使用标准库原子保存命名规则组；读写深拷贝，每组5000条、200组、10MB。写入成功后才变更内存；失败回滚，坏文件保留并拒绝覆盖，错误不包含规则正文。
+redaction_library.py提供本地搜索、只读预览、追加/覆盖、更新、重命名、删除及自动载入设置。载入失败保持对话框打开。app.py仅在下次启动时向redact场景预置默认规则，其他场景和参数不受影响。
+规则记忆文件与profile.json同目录，名为redaction-library.json。Window(data_path=None)与截图默认只用内存，生产由QINGJIAN_USER_DATA或Qt用户数据目录注入；不在源码或程序旁保存用户规则。
+自定义规则沿用原有从上到下依次替换的执行方式；新增功能没有额外运行依赖，源码启动自检与国内备用源保持不变。
+
+源码启动自检为后续每轮更新的固定要求，见项目AGENTS.md。
+main.py在导入第三方库前调用bootstrap.py：完整现有环境直接复用，否则交给中文源码启动器准备组件。冻结程序通过sys.frozen跳过这一路径，保持离线。
+bootstrap.py仅用标准库，检查requirements.txt全部模块与版本；缺依赖时向所选解释器或其标准用户site补齐，使用固定hash的pip wheel及逐源回退安装。自检和运行必须识别相同的用户site，不能因隔离启动参数将已安装用户模块隐藏。PIP_CONFIG_FILE=系统空设备仅影响子进程，不读取或修改用户/系统pip配置；不加trusted-host或extra-index-url。
+runtime-sources.json记录固定的Python/pip/LibreOffice版本、SHA256、大小、官方来源及国内备用。每次改版本必须重新核验来源，不能假设镜像永久可用。
+launcher/SourceLauncher.cs为不依赖Python的.NET Framework启动器，支持下载、校验、安全解包、进度和取消。重建：python launcher/build_launcher.py；生成的build-info.json绑定启动器与C#源码SHA256。
+build.py的verify_source_startup发布检查在缺少启动文件、共享解释器策略标记缺失、入口未先自检或启动器与源码哈希不一致时拒绝构建。
+源码发布统一运行 python package_source.py；同样强制自检文件检查，逐成员核对ZIP与源码SHA256，排除缓存、部署选择、虚拟环境、LibreOffice及support大型运行组件/上游源码归档（保留小型桥、许可、来源与源码说明），不覆盖已有版本。--output可指定源码目录以外的ZIP路径。
+startup_engine.py只读MSI数据库及CAB数据，在私有目录还原引擎并带上AMD64运行库；不执行MSI安装，排除ARM64运行库同名覆盖。
+自检准备协议为UTF-8 JSONL，event为log/progress/error/ready；ready携带实际python和启动环境变量。启动器用JobObject管理本次准备及pip子进程，取消不影响无关Python；主GUI单独启动。
+第一次交互启动在任何下载前选择复用已有Python或指定共享部署目录，支持D/E盘；配置保存在程序文件/config/startup-selection.json。备用Python、排版引擎、下载、缓存、临时目录及准备日志都跟随所选运行目录，支持QINGJIAN_RUNTIME_HOME；运行依赖仍安装在所选Python标准位置。初始化后断网可重复使用。新增依赖须同步bootstrap.MODULES及相关测试。
+首次联网仅补齐运行组件，不读取或上传用户文档。轻量源码ZIP不打入Python、Java、LibreOffice、7zip、Ghostscript等大型运行组件，startup_native.py和bootstrap.py共同按需补齐；完整包自带全部运行组件。
+
+main.py：入口及启动故障提示；qingjian/app.py：中文Qt界面。
+workbench.py：自定义首页与五组27项工具目录、用途搜索及原场景路由；选择分组不自动执行处理。
+profile.py：可注入路径的本地方案/历史存储，原子写入、深拷贝、格式校验及凭据清理；Window默认内存配置，生产main显式传本地路径。
+results_view.py：方案/历史页面和结果对话框；只允许点击打开常见办公、图片、纯文本类型，CSV导出防公式文本执行。
+app.py保存每次任务模式/输入/设置快照供失败重试；公文、脱敏和快捷替换场景分别保存会话设置，导航与推荐均遵循忙碌锁。
+app.py的SourceBar接收拖放，文件清单默认折叠；ElidedLabel单行省略长文件名，完整路径保留在提示中。
+清单状态按工具及完整源路径记录；展开/折叠、排序及切换工具保留状态。任务期间可查看清单，输入与排序被锁定。
+工作区可滚动，底部操作区独立；theme.py统一浅色样式，未新增运行依赖。
+catalog.py/forms.py：声明式工具参数与流程编辑；workers.py：聚合任务及文件改名预览线程。
+tools.py：调度与组合流程；batch.py：原四项工具调度与结果目录。
+core/common.py：不覆盖写入、输入展开和安全Excel输出。
+core/excel_ops.py：表格；document_ops.py：模板/PDF/图片；file_ops.py：文件整理/撤销/检查；content_ops.py：检索与提取。
+原word_ops.py/web_ops.py/conversion.py/image_ops.py保留。
+official_panel.py：公文三内页、格式/仅检查模式、关键词与词库设置。
+core/official_ops.py：安全XML排版、有效样式预/后检、210条提示词库与六种公文样板；official_reports.py输出本地HTML/JSON报告。
+guides.py：三类工具的操作说明、术语与本机生成的练习数据；OptionPanel显示简短上手步骤。
+core/ppt_template.py：PPTX OOXML字段填充，无python-pptx等新增运行依赖；document_ops保持Word/PPT模板统一数据与文件命名规则。
+core/text_ops.py：TXT中文编码读取与字面/正则规则；document_export.py：纯文本导出和Word内嵌图片提取。
+
+日常运行可在Windows 64位、Python 3.12或兼容环境的源码目录执行python main.py，依赖将按上述规则自检并补齐。以下venv仅用于开发和可复现构建，是开发者明确创建的隔离环境，不是程序运行时自动创建：
+py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install -r requirements-build.txt
+.venv\Scripts\python main.py
+.venv\Scripts\python -m pytest tests -q
+requirements-lock.txt记录本次构建实际版本；可用于复现。
+
+从LibreOffice官网下载Windows64发行包并核验官方SHA256，用msiexec /a行政解压，不需要安装到系统。
+.venv\Scripts\python build.py --engine "D:\build\LibreOffice" --output dist --work build
+参数指向含program/soffice.exe的引擎目录。完整分发dist\青简工具箱，不能只分发exe。
+PyInstaller随包携带Python、Qt、模块；引擎位于程序文件/engines和程序文件/support，开发机才需联网准备依赖。
+构建脚本限制依赖扫描PATH，避免其他软件ICU DLL混入Qt；将引擎System64运行库复制到program供应用本地加载。
+
+冻结程序检查：
+启动青简工具箱.exe --no-ui -- --self-check "D:\QA\自检.json"
+启动青简工具箱.exe --no-ui -- --screenshot "D:\QA\界面.png" --page 0
+--page为0至16。截图默认offscreen，设置QT_QPA_PLATFORM=windows可检查实际Windows缩放。
+不传--page时截图为首页；--scene official/materials/redact/compare/template/convert指定场景；--surface home/catalog/presets/history指定页面。
+QINGJIAN_USER_DATA为本地配置目录覆盖，生产默认Qt AppLocalDataLocation；截图未指定覆盖时仅用内存，不污染真实历史。
+--self-check现有57项，包含记事提醒持久化、循环与稍后提醒、离线农历节气、200条脱敏规则的记忆与实际替换，以及随包PPT模板实际填充；完整包需保留示例材料。构建后独立core自检前也要复制该小目录，不需要复制第二套引擎。
+自检在报告目录下建立临时样本，完成后清理；不接触用户材料。无console的exe可用Start-Process -WindowStyle Hidden -Wait等待自检退出。
+
+接口：run_*(tool,sources,folder,options,progress,cancel)；progress(done,total,message)，cancel()返回是否停止。
+返回outputs包含产物和报告，data_outputs仅业务产物，errors与warnings分别表示失败与需复核项。
+文件归档必须先plan_organize，再把返回值通过options['_plan']执行，执行前重新核验源和目标；组合流程只允许copy。
+导出配置递归剔除密码和私有_plan，不包含可执行Python/Jinja代码。
+
+边界：无OCR，无语义脱敏；公式需要缓存；原地改名只处理文件，不递归移动文件夹。应用为单用户本地桌面程序，无对外HTTP服务或业务程序自动更新；源码仅在环境缺失时联网准备组件。
