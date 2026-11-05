@@ -231,6 +231,9 @@ class QuickActionCard(QPushButton):
         return parse_mime_payload([url.toString() for url in mime.urls()], mime.text() if mime.hasText() else "")
 
     def _active(self, value, invalid=False):
+        value, invalid = bool(value), bool(invalid)
+        if bool(self.property("dragActive")) == value and bool(self.property("dragInvalid")) == invalid:
+            return
         self.setProperty("dragActive", value)
         self.setProperty("dragInvalid", invalid)
         self.style().unpolish(self)
@@ -447,13 +450,20 @@ class QuickPanel(QWidget):
         self.status_label.setMaximumHeight(28 if compact else 16777215)
         self.state.setMinimumHeight(44 if compact else 0)
         self.state.setMaximumHeight(44 if compact else 16777215)
-        for control in self.findChildren(QWidget):
-            control.style().unpolish(control)
-            control.style().polish(control)
-            control.updateGeometry()
-        self._show_paste_action()
-        self._show_folder()
-        self.updateGeometry()
+        self.setUpdatesEnabled(False)
+        try:
+            for control in (self, self.url_edit, self.paste_button, self.detach_button, self.choose_folder_button,
+                            self.cancel_button, self.result_button, self.open_folder_button,
+                            *[card.title_label for card in self.cards.values()],
+                            *[card.glyph_label for card in self.cards.values()]):
+                control.style().unpolish(control)
+                control.style().polish(control)
+                control.updateGeometry()
+            self._show_paste_action()
+            self._show_folder()
+            self.updateGeometry()
+        finally:
+            self.setUpdatesEnabled(True)
 
     def _show_paste_action(self, value=None):
         value = self.url_edit.text() if value is None else value

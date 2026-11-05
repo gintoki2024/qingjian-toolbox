@@ -75,7 +75,8 @@ class OfficialOperationsTests(unittest.TestCase):
 
     def test_defaults_and_nested_options_and_validation_before_mutation(self):
         defaults = validate_official_options({"official": {}})
-        self.assertEqual(defaults["company_name"], "利安人寿保险股份有限公司")
+        self.assertEqual(defaults["company_name"], "")
+        self.assertEqual(defaults["profile"], "company")  # Legacy saved-profile key remains compatible.
         self.assertEqual(defaults["body_font"], "仿宋")
         self.assertEqual(defaults["headings"][1]["font"], "楷体")
         self.assertEqual(validate_official_options({"profile": "general"})["company_name"], "")
@@ -300,9 +301,9 @@ class OfficialOperationsTests(unittest.TestCase):
         self.assertIsNotNone(p._p.pPr.numPr)
 
     def test_company_name_and_document_number_are_not_mistaken_for_title(self):
-        document = self.doc("利安人寿保险股份有限公司", "利安发〔2026〕10号", "关于测试工作的通知", "正文。")
+        document = self.doc("示例办公科技股份有限公司", "示办发〔2026〕10号", "关于测试工作的通知", "正文。")
         first_xml = document.paragraphs[0]._p.xml
-        result = apply_official_format(document, {"page_numbers": "keep"})
+        result = apply_official_format(document, {"page_numbers": "keep", "company_name": "示例办公科技股份有限公司"})
         self.assertEqual(document.paragraphs[0]._p.xml, first_xml)
         self.assertEqual(document.paragraphs[2].alignment, WD_ALIGN_PARAGRAPH.CENTER)
         self.assertEqual(document.paragraphs[2].runs[0].font.size, Pt(22))
@@ -310,7 +311,7 @@ class OfficialOperationsTests(unittest.TestCase):
         self.assertEqual(snap.get(qn("w:val")), "0")
 
     def test_proofreading_is_suggestion_only_with_parent_scoped_numbering(self):
-        document = self.doc("标题", "一、工作要求", "（一）事项一", "（二）事项二", "二、其他要求", "（一）再次从一开始", "（三）缺第二项", "截止目前，利安人寿保险有限公司【】 2026年2月30日（。", "2026-10-29 台帐")
+        document = self.doc("标题", "一、工作要求", "（一）事项一", "（二）事项二", "二、其他要求", "（一）再次从一开始", "（三）缺第二项", "截止目前，示例办公科技有限公司【】 2026年2月30日（。", "2026-10-29 台帐")
         original = [p.text for p in document.paragraphs]
         result = apply_official_format(document, {"custom_terms": "事项=具体事项", "page_numbers": "keep"})
         self.assertEqual([p.text for p in document.paragraphs], original)
@@ -326,7 +327,7 @@ class OfficialOperationsTests(unittest.TestCase):
 
     def test_decimal_numbering_uses_parent_scope_and_signoff_is_formatted(self):
         document = self.doc("标题", "1.1 第一项", "1.2 第二项", "2.1 新父级第一项", "正文。",
-                            "利安人寿保险股份有限公司", "2026年10月29日")
+                            "示例办公科技股份有限公司", "2026年10月29日")
         result = apply_official_format(document, {"page_numbers": "keep"})
         self.assertFalse(any("序号疑似" in x for x in result["audit"]["corrections"]))
         for paragraph in document.paragraphs[-2:]:
@@ -444,17 +445,46 @@ class OfficialOperationsTests(unittest.TestCase):
         self.assertEqual(result["audit"]["postflight"], [])
 
     def test_company_and_placeholder_checks_work_independently_of_proofreading(self):
-        document = self.doc("标题", "利安人寿保险有限公司 待补充 截止目前 2026年2月30日（")
+        document = self.doc("标题", "示例办公科技有限公司 待补充 截止目前 2026年2月30日（")
         original = [p.text for p in document.paragraphs]
         for company, placeholder in ((True, False), (False, True), (False, False)):
             result = inspect_official_document(document, {"proofread": False,
+                "company_name": "示例办公科技股份有限公司",
                 "company_term_check": company, "placeholder_check": placeholder})
             issues = "\n".join(result["audit"]["corrections"])
-            self.assertEqual("公司称谓" in issues, company)
+            self.assertEqual("单位称谓" in issues, company)
             self.assertEqual("占位文字" in issues, placeholder)
             self.assertNotIn("截至目前", issues)
             self.assertNotIn("不是有效日期", issues)
         self.assertEqual([p.text for p in document.paragraphs], original)
+
+    def test_company_check_requires_explicit_name_and_only_warns_for_same_stem(self):
+        document = self.doc("标题", "示例办公科技股份有限公司与示例办公科技有限公司、其他办公有限公司合作。")
+        original = _parts(document)
+        defaults = inspect_official_document(document, {"proofread": False})
+        self.assertEqual(defaults["audit"]["corrections"], [])
+        options = {"company_name": "示例办公科技股份有限公司", "proofread": False}
+        result = inspect_official_document(document, options)
+        issues = result["audit"]["corrections"]
+        self.assertEqual(len(issues), 1)
+        self.assertIn("单位称谓“示例办公科技有限公司”", issues[0])
+        self.assertNotIn("其他办公有限公司", issues[0])
+        self.assertIn("未替换", issues[0])
+        self.assertEqual(_parts(document), original)
+        self.assertEqual(validate_official_options({"profile": "company", **options})["company_name"],
+                         options["company_name"])
+
+    def test_user_company_name_is_literal_and_noncorporate_names_are_not_guessed(self):
+        document = self.doc("标题", "示例(测试)有限公司、示例X测试有限公司、示例研究所")
+        issues = inspect_official_document(document, {
+            "company_name": "示例(测试)股份有限公司", "proofread": False,
+        })["audit"]["corrections"]
+        self.assertEqual(len(issues), 1)
+        self.assertIn("示例(测试)有限公司", issues[0])
+        self.assertNotIn("示例X测试有限公司", issues[0])
+        self.assertEqual(inspect_official_document(document, {
+            "company_name": "示例研究院", "proofread": False,
+        })["audit"]["corrections"], [])
 
     def test_template_types_are_editable_placeholders_without_invented_facts(self):
         for kind in ("通知", "请示", "报告", "函", "批复", "会议纪要"):

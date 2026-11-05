@@ -1,8 +1,8 @@
-"""Company-compatible official-document layout with non-destructive XML edits.
+"""Configurable official-document layout with non-destructive XML edits.
 
-The company preset follows the supplied company rules for fonts, heading
-sequence and page numbers. Margins and first-line indents retain the previous
-tool's configurable defaults; they are not presented as mandatory national rules.
+Presets provide editable fonts, heading sequences, page numbers and margins.
+The legacy ``company`` profile key remains readable for saved configurations;
+it carries no organisation identity or mandatory national-standard claim.
 This module never saves a document and proofreading never replaces wording.
 """
 from __future__ import annotations
@@ -172,8 +172,7 @@ def validate_official_options(options: dict | None = None) -> dict:
         raise ValueError("上下页边距之和过大。")
     for key, default in (("body_font", "仿宋"), ("title_font", "方正小标宋简体")):
         result[key] = _text_option(options.get(key, default), key, limit=80)
-    default_company = "利安人寿保险股份有限公司" if result["profile"] == "company" else ""
-    result["company_name"] = _text_option(options.get("company_name", default_company), "公司规范名称", allow_empty=True)
+    result["company_name"] = _text_option(options.get("company_name", ""), "标准单位名称", allow_empty=True)
     custom = options.get("custom_terms", "")
     if isinstance(custom, dict):
         if any(not isinstance(k, str) or not isinstance(v, str) for k, v in custom.items()):
@@ -568,6 +567,24 @@ def _issues_preflight(document, paragraphs, title, options):
     return issues[:_MAX_ISSUES]
 
 
+def _company_name_variants(text, standard):
+    """Suggest suffix differences only for a name explicitly supplied by the user.
+
+    Do not guess abbreviations or ship an organisation-specific alias library.
+    Other companies in the text are not compared with the configured issuer.
+    """
+    suffixes = ("股份有限公司", "有限责任公司", "有限公司", "股份公司", "公司")
+    suffix = next((value for value in suffixes if standard.endswith(value)), None)
+    if not suffix:
+        return []
+    stem = standard[:-len(suffix)]
+    if len(stem) < 2:
+        return []
+    pattern = re.escape(stem) + "(?:" + "|".join(map(re.escape, suffixes)) + ")"
+    return list(dict.fromkeys(match[0] for match in re.finditer(pattern, text)
+                              if match[0] != standard))
+
+
 def _proofread(paragraphs, headings, options):
     if not (options["proofread"] or options["company_term_check"] or options["placeholder_check"]):
         return []
@@ -582,11 +599,9 @@ def _proofread(paragraphs, headings, options):
         for wrong, right in terms.items():
             if wrong in text:
                 issues.append(f"{location}疑似用词“{wrong}”，建议核对“{right}”（未替换）。")
-        if options["company_term_check"]:
-            for wrong in ("利安人寿保险有限公司", "利安人寿股份有限公司", "利安保险", "利安寿险"):
-                if wrong in text:
-                    standard = options["company_name"] or "单位全称或规范简称"
-                    issues.append(f"{location}公司称谓“{wrong}”需与“{standard}”核对。")
+        if options["company_term_check"] and options["company_name"]:
+            for wrong in _company_name_variants(text, options["company_name"]):
+                issues.append(f"{location}单位称谓“{wrong}”与设定名称“{options['company_name']}”存在后缀差异，请核对（未替换）。")
         if options["placeholder_check"] and re.search(r"(?i)(?<![A-Za-z])(?:X{2,}|TODO|TBD)(?![A-Za-z])|待补充|待完善|此处填写|请输入|【\s*】|〔\s*〕|（\s*）|\(\s*\)|(?:\d{4})?年\s*月\s*日", text):
             issues.append(f"{location}发现占位文字或空白日期，请正式发文前补齐。")
         if not options["proofread"]:
@@ -639,7 +654,7 @@ def _base_audit(document, options):
     headings = _heading_records(paragraphs, title, options)
     return {
         "profile": options["profile"], "doc_type": options["doc_type"],
-        "preset_note": "公司字体、层级、页码参照既往公司办法；页边距、首行缩进为可修改的兼容预设。" if options["profile"] == "company" else "通用自定义版式，不作国家标准符合性认证。",
+        "preset_note": "通用公文预设，字体、层级、页边距和页码均可调整；不作国家标准符合性认证。" if options["profile"] == "company" else "自定义公文版式，不作国家标准符合性认证。",
         "preflight": _issues_preflight(document, paragraphs, title, options) if options["preflight"] else [],
         "postflight": [], "headings": headings,
         "corrections": _proofread(paragraphs, headings, options),

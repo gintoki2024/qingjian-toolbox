@@ -509,5 +509,15 @@ def test_future_source_contract_is_part_of_the_project():
     project = bootstrap.PROJECT
     policy = (project / "AGENTS.md").read_text(encoding="utf-8")
     assert "每轮更新" in policy and "HTTPS" in policy
-    for name in ("bootstrap.py", "startup_engine.py", "runtime-sources.json", "启动青简工具箱.exe", "launcher/SourceLauncher.cs"):
-        assert (project / name).is_file(), name
+    # The current lightweight distribution starts through CMD and deliberately
+    # retains the historical C# source without shipping its compiled EXEs.
+    # Use the same complete contract as the packager, including source hashes,
+    # bootstrap-before-Qt ordering and the shared-interpreter policy.
+    from build import verify_source_startup
+    marker = project / "cmd-package.json"
+    if marker.is_file():
+        mode = json.loads(marker.read_text(encoding="utf-8-sig"))
+        assert mode["schema_version"] == 1 and mode["mode"] == "source"
+        verify_source_startup(project, require_exe=False)
+    else:
+        verify_source_startup(project)

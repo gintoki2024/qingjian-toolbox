@@ -41,6 +41,13 @@ from .quick_actions import MAX_INPUTS as QUICK_MAX_INPUTS, QuickActionWorker, va
 from .window_layout import compact_window_geometry, compact_window_minimum_size
 from .converter_ui import ConverterWindow, target_title as conversion_target_title
 from .conversion_session import ConversionSession
+from .icons import (
+    APP_USER_MODEL_IDS, apply_process_taskbar_identity, bind_window_icon,
+    converter_icon, duplicates_icon, notebook_icon, search_icon,
+    sidebar_converter_icon, sidebar_notebook_icon, toolbox_icon,
+)
+from .window_appearance import AppearanceController, AppearanceDialog
+from .window_snap import WindowSnapManager
 
 MODES = ["word", "web", "convert", "image"]
 TITLES = ["Word / TXT 批量处理", "网页转 Word", "Word / PDF 互转", "图片批量裁剪"]
@@ -127,14 +134,7 @@ def spin(value: float, low: float, high: float, suffix: str = "", decimals: int 
 
 
 def icon() -> QIcon:
-    pix = QPixmap(64, 64)
-    pix.fill(QColor("#6257ed"))
-    painter = QPainter(pix)
-    painter.setPen(QColor("white"))
-    painter.setFont(QFont("Microsoft YaHei UI", 31, QFont.Weight.Bold))
-    painter.drawText(pix.rect(), Qt.AlignmentFlag.AlignCenter, "简")
-    painter.end()
-    return QIcon(pix)
+    return toolbox_icon()
 
 
 class BatchWorker(QThread):
@@ -236,21 +236,38 @@ class ElidedLabel(QLabel):
     def __init__(self, text=""):
         super().__init__()
         self.full_text = text
+        self._last_elide_key = None
         self.setMinimumWidth(0)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.setText(text)
 
     def setText(self, text):
         self.full_text = text
+        self._last_elide_key = None
         self._elide()
 
     def _elide(self):
+        width = max(0, self.contentsRect().width())
+        key = (self.full_text, width)
+        if key == self._last_elide_key:
+            return
+        self._last_elide_key = key
         super().setText(self.fontMetrics().elidedText(
-            self.full_text, Qt.TextElideMode.ElideMiddle, max(0, self.contentsRect().width())))
+            self.full_text, Qt.TextElideMode.ElideMiddle, width))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._elide()
+
+
+class SettingsStack(QStackedWidget):
+    def minimumSizeHint(self):
+        size = super().minimumSizeHint()
+        # A workflow has its own responsive, scrolling step editor. Hidden
+        # pages such as image cropping must not impose their width on it.
+        if isinstance(self.currentWidget(), WorkflowPanel):
+            size.setWidth(0)
+        return size
 
 
 class SourceBar(QFrame):
@@ -264,6 +281,9 @@ class SourceBar(QFrame):
         self.setAcceptDrops(True)
 
     def _drag_state(self, active):
+        active = bool(active)
+        if bool(self.property("dragActive")) == active:
+            return
         self.setProperty("dragActive", active)
         self.style().unpolish(self)
         self.style().polish(self)
@@ -299,10 +319,16 @@ class Window(QMainWindow):
     def __init__(self, *, start_home=False, data_path=None):
         super().__init__()
         self.setWindowTitle(f"青简工具箱 · {__version__}")
-        self.setWindowIcon(icon())
+        bind_window_icon(self, "toolbox")
         self._ui_ready = False
         self._layout_compact = None
+        self._tool_parent = {"surface": "home"}
+        self._source_actions_signature = None
         self._frame_corrected = False
+        self._fit_settings_timer = QTimer(self)
+        self._fit_settings_timer.setSingleShot(True)
+        self._fit_settings_timer.setInterval(0)
+        self._fit_settings_timer.timeout.connect(self.fit_settings)
         screen = QApplication.primaryScreen().availableGeometry()
         self.setMinimumSize(compact_window_minimum_size(screen))
         self.setGeometry(compact_window_geometry(screen))
@@ -316,6 +342,9 @@ class Window(QMainWindow):
         self.last_result = None
         self.quick_result = None
         self.converter_window = None
+        self.interactive_dialogs = {}
+        self._interactive_owner = None
+        self.appearance_dialog = None
         downloads = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation)
         self.conversion_session = ConversionSession(
             Path(data_path).parent / "quick-settings.json" if data_path else None,
@@ -324,6 +353,16 @@ class Window(QMainWindow):
         self.pending_preview = None
         self.nav_buttons = []
         self.profile_store = ProfileStore(data_path)
+        self.appearance = AppearanceController(Path(data_path).parent / "appearance.json" if data_path else None, self)
+        self.window_snap = WindowSnapManager(self)
+        self.window_snap.set_enabled(self.appearance.snap_enabled)
+        self.window_snap.register(self)
+        self.appearance.register(self)
+        self.appearance.changed.connect(lambda values: self.window_snap.set_enabled(values["snap_enabled"]))
+        self.destroyed.connect(self.window_snap.shutdown)
+        self.destroyed.connect(self.appearance.shutdown)
+        QApplication.instance().aboutToQuit.connect(self.window_snap.shutdown)
+        QApplication.instance().aboutToQuit.connect(self.shutdown_interactive)
         self.redaction_store = RedactionMemoryStore(Path(data_path).parent / "redaction-library.json" if data_path else None)
         self.active_scene = ""
         self.active_context = None
@@ -361,25 +400,14 @@ class Window(QMainWindow):
         self.converter_button.setMinimumHeight(44)
         self.converter_button.setAccessibleName("独立格式转换")
         self.converter_button.setToolTip("拖入文件，选择可用目标格式 · 可折叠为悬浮按钮 · Ctrl+Shift+C")
+        self.converter_button.setIcon(sidebar_converter_icon(20))
+        self.converter_button.setIconSize(QSize(20, 20))
         side_layout.addWidget(self.converter_button)
         self.notebook_button = button("记事与提醒", lambda checked=False: self.notebook_requested.emit(), "notebookLaunch")
         self.notebook_button.setMinimumHeight(48)
         self.notebook_button.setAccessibleName("记事与提醒")
         self.notebook_button.setToolTip("打开可拆分的日历与事项浮窗 · Ctrl+Shift+N")
-        notebook_icon = QPixmap(22, 22)
-        notebook_icon.fill(Qt.GlobalColor.transparent)
-        icon_painter = QPainter(notebook_icon)
-        icon_painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        icon_painter.setPen(QPen(QColor("#ffffff"), 1.6))
-        icon_painter.drawRoundedRect(3, 4, 16, 15, 3, 3)
-        icon_painter.drawLine(3, 9, 19, 9)
-        icon_painter.drawLine(7, 2, 7, 6)
-        icon_painter.drawLine(15, 2, 15, 6)
-        icon_painter.drawPoint(8, 13)
-        icon_painter.drawPoint(14, 13)
-        icon_painter.drawPoint(8, 16)
-        icon_painter.end()
-        self.notebook_button.setIcon(QIcon(notebook_icon))
+        self.notebook_button.setIcon(sidebar_notebook_icon(22))
         self.notebook_button.setIconSize(QSize(22, 22))
         side_layout.addWidget(self.notebook_button)
         side_layout.addSpacing(8)
@@ -412,6 +440,7 @@ class Window(QMainWindow):
         self.sidebar_space = QWidget()
         side_layout.addWidget(self.sidebar_space, 1)
         self.sidebar_space.hide()
+        side_layout.addWidget(button("外观与窗口吸附", self.show_appearance, "nav"))
         help_button = button("使用说明与能力范围", self.show_help, "nav")
         side_layout.addWidget(help_button)
         side_layout.addSpacing(8)
@@ -454,21 +483,38 @@ class Window(QMainWindow):
         self.compact_menu.addAction("常用方案", lambda: self.show_surface("presets"))
         self.compact_menu.addAction("最近任务", lambda: self.show_surface("history"))
         self.compact_menu.addAction("添加文件 / 文件夹 / 链接…", self.choose_smart_sources)
+        self.compact_menu.addAction("外观与窗口吸附…", self.show_appearance)
         self.compact_menu.addAction("使用说明", self.show_help)
         self.compact_menu.addAction("转换格式与字段说明", self.show_conversion_help)
         self.compact_menu.addAction("恢复贴边小窗", self.apply_compact_geometry)
         self.compact_tools.setMenu(self.compact_menu)
         self.compact_history = button("记录", lambda: self.show_surface("history"), "quiet")
+        self.compact_appearance = button("外观", self.show_appearance, "quiet")
+        self.compact_appearance.setToolTip("调整所有窗口的透明度与自动吸附 · Ctrl+,")
+        self.compact_appearance.setAccessibleName("透明度与窗口吸附")
         self.compact_converter = button("转换", self.show_converter, "converterLaunch")
         self.compact_converter.setToolTip("打开独立格式转换浮窗 · Ctrl+Shift+C")
         self.compact_converter.setAccessibleName("独立格式转换浮窗")
         self.compact_notebook = button("记事提醒", lambda: self.notebook_requested.emit(), "notebookLaunch")
         self.compact_notebook.setToolTip("打开日历与事项浮窗 · Ctrl+Shift+N")
-        for control in (self.compact_home, self.compact_tools, self.compact_history, self.compact_converter, self.compact_notebook):
+        for control in (self.compact_home, self.compact_tools, self.compact_history, self.compact_appearance, self.compact_converter, self.compact_notebook):
             control.setStyleSheet("QPushButton { padding: 6px 7px; min-height: 20px; }")
             toolbar.addWidget(control)
-        toolbar.insertStretch(3, 1)
+        toolbar.insertStretch(4, 1)
         host_layout.addWidget(self.compact_toolbar)
+        self.page_navigation = QFrame()
+        self.page_navigation.setObjectName("pageNavigation")
+        self.page_navigation_layout = QHBoxLayout(self.page_navigation)
+        self.page_navigation_layout.setContentsMargins(28, 12, 26, 0)
+        self.page_navigation_layout.setSpacing(10)
+        self.back_button = button("← 返回上一级", self.go_back, "pageBack")
+        self.back_button.setAccessibleName("返回上一级")
+        self.back_button.setToolTip("返回进入此工具前的页面，保留文件和设置 · Alt+←")
+        self.page_navigation_layout.addWidget(self.back_button)
+        self.parent_label = ElidedLabel()
+        self.parent_label.setObjectName("navigationParent")
+        self.page_navigation_layout.addWidget(self.parent_label, 1)
+        host_layout.addWidget(self.page_navigation)
         host_layout.addWidget(self.content_stack, 1)
         outer.addWidget(host, 1)
         self.main_layout = main_layout
@@ -586,7 +632,7 @@ class Window(QMainWindow):
         settings_top.addWidget(self.settings_more)
         self.settings_more.hide()
         settings_layout.addLayout(settings_top)
-        self.settings = QStackedWidget()
+        self.settings = SettingsStack()
         self.settings.addWidget(self.build_word())
         self.settings.addWidget(self.build_web())
         self.settings.addWidget(self.build_convert())
@@ -625,7 +671,10 @@ class Window(QMainWindow):
         self.choose_output_button = button("更改", self.choose_output, "quiet")
         output_row.addWidget(self.output_edit, 1)
         output_row.addWidget(self.choose_output_button)
-        action_layout.addLayout(output_row)
+        self.output_row_widget = QWidget()
+        self.output_row_widget.setLayout(output_row)
+        output_row.setContentsMargins(0, 0, 0, 0)
+        action_layout.addWidget(self.output_row_widget)
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
@@ -671,11 +720,15 @@ class Window(QMainWindow):
         self.history_page.clear_requested.connect(self.clear_history)
         self.search_shortcut = QShortcut(QKeySequence("Ctrl+K"), self)
         self.search_shortcut.activated.connect(self.focus_tool_search)
+        self.back_shortcut = QShortcut(QKeySequence("Alt+Left"), self)
+        self.back_shortcut.activated.connect(self.go_back)
         self.notebook_shortcut = QShortcut(QKeySequence("Ctrl+Shift+N"), self)
         self.notebook_shortcut.activated.connect(self.notebook_requested.emit)
         self.converter_shortcut = QShortcut(QKeySequence("Ctrl+Shift+C"), self)
         self.converter_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
         self.converter_shortcut.activated.connect(self.show_converter)
+        self.appearance_shortcut = QShortcut(QKeySequence("Ctrl+,"), self)
+        self.appearance_shortcut.activated.connect(self.show_appearance)
         self.word_scene_options["word"] = copy.deepcopy(self.get_options("word"))
         self.restore_redaction_memory()
         for control in self.findChildren(QAbstractSpinBox):
@@ -686,6 +739,95 @@ class Window(QMainWindow):
             self.show_surface("home")
         self._ui_ready = True
         self.update_responsive_layout()
+
+    def nativeEvent(self, event_type, message):
+        manager = getattr(self, "window_snap", None)
+        if manager is not None:
+            handled, result = manager.native_event(self, event_type, message)
+            if handled:
+                return handled, result
+        return super().nativeEvent(event_type, message)
+
+    def show_appearance(self):
+        if self.appearance_dialog is None or not isValid(self.appearance_dialog):
+            self.appearance_dialog = AppearanceDialog(self.appearance, self)
+            bind_window_icon(self.appearance_dialog, "toolbox")
+        self.appearance_dialog.show()
+        self.appearance_dialog.raise_()
+        self.appearance_dialog.activateWindow()
+
+    def register_notebook_windows(self, notebook_window):
+        provider = getattr(notebook_window, "owned_windows", None)
+        windows = list(provider()) if callable(provider) else [notebook_window, getattr(notebook_window, "tasks_window", None)]
+        # A saved combined layout hides the companion until the first split.
+        # Register it now so its later drag uses the same snap/appearance state.
+        for companion in getattr(notebook_window, "companion_windows", ()):
+            if companion not in windows:
+                windows.append(companion)
+        for floating in windows:
+            if floating is not None and isValid(floating):
+                self.window_snap.register(floating)
+                self.appearance.register(floating)
+
+    def interactive_is_visible(self):
+        return any(isValid(dialog) and dialog.isVisible() for dialog in self.interactive_dialogs.values())
+
+    def open_interactive_tool(self, mode, files, options):
+        if self._busy or self.worker is not None:
+            return False
+        dialog = self.interactive_dialogs.get(mode)
+        if dialog is None or not isValid(dialog):
+            if mode == "content_search":
+                from .search_ui import DocumentSearchDialog
+                dialog = DocumentSearchDialog([Path(value) for value in files], options)
+                dialog.completed.connect(lambda result: self._interactive_completed(dialog, result))
+            else:
+                from .duplicates_ui import DuplicatesDialog
+                dialog = DuplicatesDialog([Path(value) for value in files], options)
+                dialog.scan_finished.connect(lambda result: self._interactive_completed(dialog, result))
+                dialog.batch_finished.connect(lambda result: self._interactive_completed(dialog, result))
+            dialog.execution_available = lambda: isValid(self) and not self._busy
+            bind_window_icon(dialog, "search" if mode == "content_search" else "duplicates")
+            dialog.busy_changed.connect(lambda busy, owner=dialog: self._interactive_busy(owner, busy))
+            self.interactive_dialogs[mode] = dialog
+        else:
+            dialog.sources = [Path(value) for value in files]
+            dialog.options = copy.deepcopy(options)
+        self.appearance.register(dialog)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        self.result_button.setEnabled(True)
+        return dialog.start_search() if mode == "content_search" else dialog.start_scan()
+
+    def _interactive_busy(self, owner, busy):
+        if not isValid(self):
+            return
+        if busy:
+            self._interactive_owner = owner
+            self.set_busy(True)
+            self.progress.setValue(0)
+            self.status.setText("结果窗口正在处理 · 可在窗口内停止任务")
+        elif self._interactive_owner is owner:
+            self._interactive_owner = None
+            self.set_busy(False)
+            self.progress.setValue(100)
+            self.status.setText(owner.status_label.text() or "结果已在窗口内显示 · 点击文件查看详情")
+
+    def _interactive_completed(self, owner, result):
+        if isValid(self) and not owner.is_busy():
+            # Result bodies remain in memory, outside recent-task history.
+            self.status.setText("结果已在窗口内显示 · 点击文件查看详情")
+
+    def shutdown_interactive(self):
+        for dialog in self.interactive_dialogs.values():
+            if isValid(dialog) and dialog.is_busy():
+                dialog.cancel_task()
+        for dialog in self.interactive_dialogs.values():
+            if isValid(dialog):
+                worker = getattr(dialog, "worker", None)
+                if worker is not None and worker.isRunning():
+                    worker.wait()
 
     def apply_compact_geometry(self):
         if self.isMaximized():
@@ -716,6 +858,12 @@ class Window(QMainWindow):
         if getattr(self, "_ui_ready", False):
             self.update_responsive_layout()
 
+    def _queue_fit_settings(self):
+        if hasattr(self, "_fit_settings_timer"):
+            self._fit_settings_timer.start()
+        else:
+            QTimer.singleShot(0, self.fit_settings)
+
     def update_responsive_layout(self):
         compact = self.width() < 900
         changed = compact != self._layout_compact
@@ -726,16 +874,22 @@ class Window(QMainWindow):
         # pixels. Keep both highlighted float buttons legible; history remains
         # available from the tools menu at that width.
         self.compact_history.setVisible(self.width() >= 340)
+        self.compact_appearance.setVisible(self.width() >= 420)
         self.compact_home.setChecked(self.content_stack.currentWidget() == self.home_page)
         if changed:
+            self.page_navigation_layout.setContentsMargins(*((12, 6, 12, 0) if compact else (28, 12, 26, 0)))
             self.home_page.set_compact(compact)
             self.catalog_page.set_compact(compact)
-            self.main_layout.setContentsMargins(*( (12, 8, 12, 10) if compact else (28, 25, 26, 20) ))
+            if hasattr(self.presets_page, "set_compact"):
+                self.presets_page.set_compact(compact)
+            if hasattr(self.history_page, "set_compact"):
+                self.history_page.set_compact(compact)
+            self.main_layout.setContentsMargins(*((12, 8, 12, 10) if compact else (28, 25, 26, 20)))
             self.main_layout.setSpacing(10 if compact else 16)
             self.workspace_scroll.widget().layout().setSpacing(10 if compact else 18)
-            self.source_layout.setContentsMargins(*( (12, 10, 12, 10) if compact else (18, 15, 18, 15) ))
-            self.action_layout.setContentsMargins(*( (12, 9, 12, 10) if compact else (18, 13, 18, 14) ))
-            self.settings_card.layout().setContentsMargins(*( (12, 12, 12, 12) if compact else (22, 18, 22, 20) ))
+            self.source_layout.setContentsMargins(*((12, 10, 12, 10) if compact else (18, 15, 18, 15)))
+            self.action_layout.setContentsMargins(*((12, 9, 12, 10) if compact else (18, 13, 18, 14)))
+            self.settings_card.layout().setContentsMargins(*((12, 12, 12, 12) if compact else (22, 18, 22, 20)))
             self.source_mark.setVisible(not compact)
             self.title.setStyleSheet("font-size: 20px;" if compact else "")
             self.settings_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded if compact else Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -746,6 +900,7 @@ class Window(QMainWindow):
             for control in controls:
                 self.file_top.removeWidget(control)
                 self.source_actions.removeWidget(control)
+            self._source_actions_signature = None
             if compact:
                 self.source_layout.insertLayout(1, self.source_actions)
                 for control in controls:
@@ -759,8 +914,8 @@ class Window(QMainWindow):
                     control.setStyleSheet("")
                 self.action_layout.removeWidget(self.status)
                 self.action_bottom.insertWidget(0, self.status, 1)
-            QTimer.singleShot(0, self.fit_settings)
-        self.start_button.setVisible(not(compact and self._busy))
+            self._queue_fit_settings()
+        self.start_button.setVisible(not (compact and self._busy))
         narrow = compact and self.width() < 360
         self.title.setWordWrap(compact)
         self.local_badge.setVisible(not narrow)
@@ -768,11 +923,14 @@ class Window(QMainWindow):
         self.empty_hint.setWordWrap(True)
         if compact:
             controls = (self.add_url_button, self.add_files_button, self.add_folder_button, self.manage_button)
-            for control in controls:
-                self.source_actions.removeWidget(control)
-            visible = [control for control in controls if not control.isHidden()]
-            for index, control in enumerate(visible):
-                self.source_actions.addWidget(control, index // 2 if narrow else 0, index % 2 if narrow else index)
+            visible = tuple(control for control in controls if not control.isHidden())
+            signature = (narrow, visible)
+            if signature != self._source_actions_signature:
+                self._source_actions_signature = signature
+                for control in controls:
+                    self.source_actions.removeWidget(control)
+                for index, control in enumerate(visible):
+                    self.source_actions.addWidget(control, index // 2 if narrow else 0, index % 2 if narrow else index)
         self._update_settings_actions()
 
     def _update_settings_actions(self):
@@ -832,7 +990,7 @@ class Window(QMainWindow):
         tabs.addTab(format_page, "通用格式")
         self.official_panel = OfficialPanel()
         self.official_panel.changed.connect(self.official_changed)
-        self.official_panel.layout_changed.connect(lambda: QTimer.singleShot(0, self.fit_settings))
+        self.official_panel.layout_changed.connect(self._queue_fit_settings)
         self.official_panel.preflight_requested.connect(self.preflight_official)
         self.official_panel.template_requested.connect(self.generate_official_template)
         tabs.addTab(self.official_panel, "公文排版")
@@ -849,7 +1007,7 @@ class Window(QMainWindow):
         mask.addLayout(row)
         self.m_custom = SensitiveRuleEditor(default_replacement=self.m_custom_replacement.text)
         self.m_custom_replacement.textChanged.connect(self.m_custom.refresh_default_replacement)
-        self.m_custom.changed.connect(lambda: QTimer.singleShot(0, self.fit_settings))
+        self.m_custom.changed.connect(self._queue_fit_settings)
         mask.addWidget(self.m_custom)
         self.redaction_remember_button = button("记住当前规则", self.remember_redaction_rules, "sourceAdd")
         self.redaction_library_button = button("规则记忆库", self.open_redaction_library)
@@ -1068,9 +1226,12 @@ class Window(QMainWindow):
     def switch_mode(self, index: int):
         if self.worker or self._busy:
             return
+        if self.content_stack.currentWidget() is not self.job_page:
+            self._tool_parent = self._surface_snapshot()
         self.mode = MODES[index]
         self.active_scene = self._word_scene if self.mode == "word" and self._word_scene != "word" else ""
         self.content_stack.setCurrentWidget(self.job_page)
+        self._update_page_navigation()
         for control in self.surface_buttons.values():
             control.setChecked(False)
         group = next((group for group in TOOL_GROUPS if self.mode in group["modes"]), None)
@@ -1093,7 +1254,18 @@ class Window(QMainWindow):
         self.undo_button.setVisible(self.mode == "file_organize")
         self.guide_button.setVisible(self.mode in GUIDES)
         self.add_files_button.setVisible(self.mode != "check_materials")
-        self.start_button.setText("生成预览  →" if self.mode == "file_organize" else "开始处理  →")
+        interactive = self.mode in {"content_search", "find_duplicates"}
+        self.output_row_widget.setVisible(not interactive)
+        self.start_button.setText({"file_organize": "生成预览  →", "content_search": "检索并查看  →",
+                                   "find_duplicates": "查找重复文件  →"}.get(self.mode, "开始处理  →"))
+        self.result_button.setText("查看结果窗口" if interactive else "查看结果")
+        if interactive:
+            dialog = self.interactive_dialogs.get(self.mode)
+            self.result_button.setEnabled(dialog is not None and isValid(dialog))
+            self.status.setText("结果直接在窗口内显示 · 不生成检索或查重清单")
+        else:
+            self.result_button.setEnabled(bool(self.last_result and self.last_result.get("folder")))
+            self.status.setText("就绪 · 每次处理自动创建独立结果文件夹")
         if self.mode == "word" and self.official_panel.enabled.isChecked() and self.official_panel.operation.currentData() == "check":
             self.start_button.setText("开始检查  →")
         self.empty_hint.setText({"excel_compare": "第 1 份为旧表，第 2 份为新表", "document_compare": "第 1 份为旧版，第 2 份为新版",
@@ -1101,7 +1273,7 @@ class Window(QMainWindow):
         self.manage_button.setChecked(False)
         self.workspace_scroll.verticalScrollBar().setValue(0)
         self.refresh_table()
-        QTimer.singleShot(0, self.fit_settings)
+        self._queue_fit_settings()
         if index == 2:
             engine = find_libreoffice()
             self.engine_label.setText("Word 排版引擎：已就绪" if engine else "Word 排版引擎：未检测到，请保留“程序文件/engines”；源码运行可通过启动器补齐。PDF 转 Word 可用。")
@@ -1116,7 +1288,9 @@ class Window(QMainWindow):
     def show_converter(self):
         if self.converter_window is None:
             self.converter_window = ConverterWindow(self._converter_settings)
-            self.converter_window.setWindowIcon(icon())
+            self.window_snap.register(self.converter_window)
+            self.appearance.register(self.converter_window)
+            bind_window_icon(self.converter_window, "converter")
             self.converter_window.submitted.connect(self.start_quick_action)
             self.converter_window.cancel_requested.connect(self.stop_task)
             self.converter_window.results_requested.connect(self.show_quick_results)
@@ -1241,11 +1415,63 @@ class Window(QMainWindow):
             owner = self.converter_window if self.converter_is_visible() else self
             ResultDialog(self.quick_result, owner, title="快捷转换 · 结果详情").exec()
 
+    def _surface_snapshot(self):
+        current = self.content_stack.currentWidget()
+        name = next((name for name, page in self.surfaces.items() if page is current), "home")
+        state = {"surface": name}
+        if name == "catalog":
+            state.update(group=self.catalog_page.current_group,
+                         search=self.catalog_page.search_edit.text(),
+                         scroll=self.catalog_page.scroll.verticalScrollBar().value())
+        return state
+
+    def _update_page_navigation(self):
+        on_tool = self.content_stack.currentWidget() is self.job_page
+        on_home = self.content_stack.currentWidget() is self.home_page
+        parent = self._tool_parent if on_tool else {"surface": "home"}
+        name = parent.get("surface", "home")
+        caption = {"home": "首页", "catalog": "全部工具", "presets": "常用方案", "history": "最近任务"}.get(name, "首页")
+        if name == "catalog":
+            group = next((item for item in TOOL_GROUPS if item["id"] == parent.get("group")), None)
+            if group:
+                caption = group["title"]
+            if parent.get("search"):
+                caption += " · 搜索结果"
+        self.parent_label.setText(caption)
+        self.parent_label.setToolTip("上一级：" + caption)
+        self.page_navigation.setVisible(not on_home)
+        self.back_button.setEnabled(not (self.worker or self._busy))
+
+    def go_back(self):
+        if self.worker or self._busy:
+            return False
+        if self.content_stack.currentWidget() is self.home_page:
+            return False
+        state = dict(self._tool_parent) if self.content_stack.currentWidget() is self.job_page else {"surface": "home"}
+        name = state.get("surface", "home")
+        if name not in self.surfaces:
+            name = "home"
+        if name == "catalog":
+            self.catalog_page.set_group(state.get("group", "all"))
+            self.catalog_page.search_edit.setText(state.get("search", ""))
+        self.show_surface(name)
+        if name == "catalog":
+            scroll = self.catalog_page.scroll.verticalScrollBar()
+            value = state.get("scroll", 0)
+            scroll.setValue(value)
+            def restore_scroll():
+                if isValid(self) and self.content_stack.currentWidget() is self.catalog_page:
+                    scroll.setValue(value)
+            QTimer.singleShot(0, restore_scroll)
+            self.catalog_page.search_edit.setFocus(Qt.FocusReason.OtherFocusReason)
+        return True
+
     def show_surface(self, name):
         if self.worker or self._busy or name not in self.surfaces:
             return
         self.refresh_workbench()
         self.content_stack.setCurrentWidget(self.surfaces[name])
+        self._update_page_navigation()
         self.context_heading.hide()
         self.nav_scroll.hide()
         self.sidebar_space.show()
@@ -1502,8 +1728,12 @@ class Window(QMainWindow):
             height = current.sizeHint().height()
             if isinstance(current, QTabWidget):
                 height = current.currentWidget().sizeHint().height() + current.tabBar().sizeHint().height() + 8
-            self.settings.setFixedHeight(max(210, height))
-            self.settings_scroll.setFixedHeight(max(210, height) + (20 if self._layout_compact else 0))
+            target_h = max(210, height)
+            scroll_h = target_h + (20 if self._layout_compact else 0)
+            if self.settings.height() != target_h:
+                self.settings.setFixedHeight(target_h)
+            if self.settings_scroll.height() != scroll_h:
+                self.settings_scroll.setFixedHeight(scroll_h)
 
     def toggle_queue(self, expanded):
         self.queue_panel.setVisible(expanded and bool(self.files[self.mode]))
@@ -1513,19 +1743,23 @@ class Window(QMainWindow):
         files = self.files[self.mode]
         states = self.queue_states[self.mode]
         self.queue_states[self.mode] = states = {source: states[source] for source in files if source in states}
-        self.table.setRowCount(len(files))
-        for index, source in enumerate(files):
-            name = source if is_url(source) else Path(source).name
-            kind = "链接" if is_url(source) else ("文件夹" if Path(source).is_dir() else Path(source).suffix.upper().lstrip("."))
-            state, success, detail = states.get(source, ("待处理", None, source))
-            for col, value in enumerate([name, kind, state]):
-                item = QTableWidgetItem(value)
-                item.setToolTip(source)
-                self.table.setItem(index, col, item)
-            self.table.item(index, 2).setToolTip(detail)
-            if success is not None:
-                self.table.item(index, 2).setForeground(QColor("#327e66" if success else "#b54e4e"))
-        self.table.setFixedHeight(40 + 38 * min(5, max(1, len(files))))
+        self.table.setUpdatesEnabled(False)
+        try:
+            self.table.setRowCount(len(files))
+            for index, source in enumerate(files):
+                name = source if is_url(source) else Path(source).name
+                kind = "链接" if is_url(source) else ("文件夹" if Path(source).is_dir() else Path(source).suffix.upper().lstrip("."))
+                state, success, detail = states.get(source, ("待处理", None, source))
+                for col, value in enumerate([name, kind, state]):
+                    item = QTableWidgetItem(value)
+                    item.setToolTip(source)
+                    self.table.setItem(index, col, item)
+                self.table.item(index, 2).setToolTip(detail)
+                if success is not None:
+                    self.table.item(index, 2).setForeground(QColor("#327e66" if success else "#b54e4e"))
+            self.table.setFixedHeight(40 + 38 * min(5, max(1, len(files))))
+        finally:
+            self.table.setUpdatesEnabled(True)
         self.count_label.setText(f"{len(files)} 个项目" if files else "未选择")
         if files:
             names = [source if is_url(source) else Path(source).name for source in files]
@@ -1687,7 +1921,7 @@ class Window(QMainWindow):
             text = f"本机已记住 {count} 组 · 点击“记住当前规则”，下次可直接使用。"
         self.redaction_memory_summary.setText(text)
         self.redaction_memory_summary.setToolTip(self.redaction_store.last_error or "只保存自定义替换规则；手机号、格式、公文及文件清单等设置各自保留。")
-        QTimer.singleShot(0, self.fit_settings)
+        self._queue_fit_settings()
 
     def restore_redaction_memory(self):
         """Restore explicit custom rules into the redaction scene only."""
@@ -1897,11 +2131,12 @@ class Window(QMainWindow):
         self.stop_button.setEnabled(busy)
         for control in (self.compact_home, self.compact_tools, self.compact_history):
             control.setEnabled(not busy)
+        self.back_button.setEnabled(not busy)
         if self._ui_ready:
             self.update_responsive_layout()
 
     def start_task(self, checked=False, *, check_official=False):
-        if self.worker:
+        if self.worker or self._busy:
             return
         files = self.files[self.mode].copy()
         if not files:
@@ -1922,6 +2157,9 @@ class Window(QMainWindow):
                     raise ValueError("未找到 Word 排版引擎。请保留“程序文件/engines”，或使用源码启动器自检补齐后重试。")
         except Exception as exc:
             QMessageBox.warning(self, "请检查处理设置", str(exc))
+            return
+        if self.mode in {"content_search", "find_duplicates"}:
+            self.open_interactive_tool(self.mode, files, options)
             return
         self.queue_states[self.mode].clear()
         self.refresh_table()
@@ -2028,6 +2266,11 @@ class Window(QMainWindow):
         self.status.setText(message or "正在处理…")
 
     def stop_task(self):
+        if self._interactive_owner is not None and isValid(self._interactive_owner) and self._interactive_owner.is_busy():
+            self._interactive_owner.cancel_task()
+            self.stop_button.setEnabled(False)
+            self.status.setText("正在停止 · 等待当前文件读取或整理结束")
+            return
         if self.worker:
             self.worker.requestInterruption()
             self.stop_button.setEnabled(False)
@@ -2079,6 +2322,13 @@ class Window(QMainWindow):
             QTimer.singleShot(0, self.review_preview)
 
     def show_results(self):
+        if self.mode in {"content_search", "find_duplicates"}:
+            dialog = self.interactive_dialogs.get(self.mode)
+            if dialog is not None and isValid(dialog):
+                dialog.show()
+                dialog.raise_()
+                dialog.activateWindow()
+            return
         if not self.last_result:
             return
         dialog = ResultDialog(self.last_result, self, retryable=bool(self.failed_sources()))
@@ -2212,6 +2462,10 @@ class Window(QMainWindow):
         ), conversion=True)
 
     def closeEvent(self, event):
+        if self._interactive_owner is not None and isValid(self._interactive_owner) and self._interactive_owner.is_busy():
+            QMessageBox.information(self, "任务正在处理中", "请先停止检索或查重任务，等待处理结束后再关闭主窗口。")
+            event.ignore()
+            return
         if self.converter_is_visible():
             # This QMainWindow remains alive (no WA_DeleteOnClose), so the one
             # shared worker and completion slots survive closing the main UI.
@@ -2243,9 +2497,15 @@ def main():
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     elif args.screenshot and args.native_screenshot:
         os.environ.pop("QT_QPA_PLATFORM", None)
+    apply_process_taskbar_identity(
+        APP_USER_MODEL_IDS["converter"] if args.converter else
+        APP_USER_MODEL_IDS["notebook"] if args.notebook else
+        APP_USER_MODEL_IDS["toolbox"]
+    )
     app = QApplication(sys.argv[:1])
     app.setApplicationName("青简工具箱")
     app.setOrganizationName("QingjianLocal")
+    app.setWindowIcon(converter_icon() if args.converter else notebook_icon() if args.notebook else toolbox_icon())
     # Qt's offscreen plugin has no Windows font registry integration. Load the
     # already-installed Windows fonts for headless QA; no font is redistributed.
     if not QFontDatabase.families():
@@ -2280,6 +2540,7 @@ def main():
     notebook = NotebookController(notebook_store, open_toolbox=open_toolbox, parent=app,
                                   enable_tray=not bool(args.screenshot), test_mode=bool(args.screenshot))
     notebook.store_changed.connect(window.home_page.personal_panel.set_notebook_store)
+    notebook.window_created.connect(window.register_notebook_windows)
     def report_notebook_error(message):
         window.status.setText(message)
         if notebook.window is not None:
@@ -2288,7 +2549,8 @@ def main():
 
     notebook.error.connect(report_notebook_error)
     window.notebook_requested.connect(notebook.show_window)
-    notebook.stopped.connect(lambda: app.quit() if not window.isVisible() and not window.converter_is_visible() else None)
+    notebook.stopped.connect(lambda: app.quit() if not window.isVisible() and not window.converter_is_visible()
+                            and not window.interactive_is_visible() and window._interactive_owner is None else None)
     app.aboutToQuit.connect(notebook.shutdown)
     if args.page is not None:
         window.switch_mode(args.page)

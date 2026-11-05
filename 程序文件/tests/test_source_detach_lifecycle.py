@@ -20,6 +20,8 @@ import uuid
 
 import pytest
 
+from startup_fixtures import real_venv
+
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows console lifecycle")
 PROJECT = Path(__file__).resolve().parents[1]
@@ -309,11 +311,7 @@ def use_console_only_python(case):
     # A real venv console redirector with no sibling pythonw.  Qt modules are
     # inserted only by the fixture main, never installed into this environment.
     interpreter = case.base / "只有控制台的 Python 环境"
-    scripts = interpreter / "Scripts"
-    scripts.mkdir(parents=True)
-    shutil.copy2(sys.executable, scripts / "python.exe")
-    (interpreter / "pyvenv.cfg").write_text("home = " + str(Path(sys.base_prefix)) + "\ninclude-system-site-packages = false\n", encoding="utf-8")
-    case.python = scripts / "python.exe"
+    case.python = real_venv(interpreter, console_only=True)
     assert not case.python.with_name("pythonw.exe").exists()
 
 

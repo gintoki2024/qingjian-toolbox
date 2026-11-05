@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from .glass import apply_glass
+from .icons import bind_window_icon, notebook_icon
 
 
 def _store_path(store):
@@ -28,21 +29,7 @@ def _store_path(store):
 
 
 def _icon():
-    canvas = QPixmap(64, 64)
-    canvas.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(canvas)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QColor("#6257ed"))
-    painter.drawRoundedRect(4, 4, 56, 56, 15, 15)
-    painter.setPen(QColor("white"))
-    font = painter.font()
-    font.setPixelSize(32)
-    font.setBold(True)
-    painter.setFont(font)
-    painter.drawText(canvas.rect(), Qt.AlignmentFlag.AlignCenter, "记")
-    painter.end()
-    return QIcon(canvas)
+    return notebook_icon()
 
 
 class ReminderCard(QDialog):
@@ -58,7 +45,7 @@ class ReminderCard(QDialog):
         self.allow_close = False
         self.setObjectName("reminderCard")
         self.setWindowTitle("青简 · 事项提醒")
-        self.setWindowIcon(_icon())
+        bind_window_icon(self, "reminder")
         self.setMinimumWidth(380)
         self.resize(420, 270)
         self.setModal(False)
@@ -144,6 +131,7 @@ class NotebookController(QObject):
     stopped = Signal()
     error = Signal(str)
     store_changed = Signal(object)
+    window_created = Signal(object)
 
     def __init__(self, store, open_toolbox=None, parent=None, *, clock=datetime.now,
                  enable_tray=True, test_mode=False):
@@ -314,6 +302,7 @@ class NotebookController(QObject):
             window.settings_changed.connect(self._apply_settings)
         if hasattr(window, "layout_changed"):
             window.layout_changed.connect(lambda: self._apply_settings(self.store.settings))
+        self.window_created.emit(window)
         return window
 
     def _owned_windows(self):

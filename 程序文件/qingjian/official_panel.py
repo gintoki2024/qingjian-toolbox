@@ -77,9 +77,9 @@ class OfficialPanel(QWidget):
         presets = QHBoxLayout()
         presets.addWidget(QLabel("版式预设"))
         self.profile = QComboBox()
-        self.profile.addItem("利安公文格式", "company")
-        self.profile.addItem("通用公文 · 可自定义", "general")
-        self.profile.setToolTip("利安预设参考公司附件3及既往工具设置。切换预设会恢复本页版式和标题层级默认值。")
+        self.profile.addItem("通用公文格式", "company")
+        self.profile.addItem("自定义公文格式", "general")
+        self.profile.setToolTip("提供可调整的标题、正文、页边距和页码设置，不代表国家标准符合性认证。切换预设会恢复本页版式和标题层级默认值。")
         presets.addWidget(self.profile, 2)
         presets.addSpacing(10)
         presets.addWidget(QLabel("公文种类"))
@@ -203,7 +203,7 @@ class OfficialPanel(QWidget):
         layout.addLayout(punctuation)
         checks = QHBoxLayout()
         for key, title in (("preflight", "格式预检"), ("proofread", "规则纠错"),
-                           ("company_term_check", "固定称谓"), ("placeholder_check", "残留占位符")):
+                           ("company_term_check", "单位称谓"), ("placeholder_check", "残留占位符")):
             self.controls[key] = QCheckBox(title)
             checks.addWidget(self.controls[key])
         checks.addStretch()
@@ -211,7 +211,8 @@ class OfficialPanel(QWidget):
         company = QHBoxLayout()
         company.addWidget(QLabel("标准单位名称"))
         self.controls["company_name"] = QLineEdit()
-        self.controls["company_name"].setPlaceholderText("填写后检查正文中的相关单位称谓")
+        self.controls["company_name"].setPlaceholderText("选填；留空不检查单位名称")
+        self.controls["company_name"].setToolTip("仅以你填写的名称为依据，提示同主体名称的常见公司后缀差异，不猜测单位简称、不自动替换。其他写法可在自定义错词库中明确指定。")
         company.addWidget(self.controls["company_name"], 1)
         layout.addLayout(company)
         terms_header = QHBoxLayout()

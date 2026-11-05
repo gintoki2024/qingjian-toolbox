@@ -6,6 +6,30 @@ from pathlib import Path
 
 
 GUIDES = {
+    "content_search": {
+        "intro": "不打开每一份文件，也能在本地材料中定位关键词，并直接阅读命中的段落。",
+        "quick": "① 添加文件或文件夹　② 每行填写一个搜索词　③ 左侧选择文件，右侧查看命中段落。",
+        "steps": ["添加需要检索的材料，勾选“包含子文件夹”可同时检查下级目录。",
+                  "每行填写一个搜索词，选择“任一搜索词”或“全部搜索词”；全部匹配要求在同一段落或文本单元中出现。",
+                  "点击“检索并查看”。结果窗口左侧显示文件名与地址，单击文件在右侧查看命中段落、页码或工作表行。",
+                  "右侧关键词会高亮，可跳转上一处、下一处。可以停止或重新检索；不会生成检索结果文件。"],
+        "terms": [("可检索范围", "DOCX、电子PDF、XLSX、CSV、TXT、HTML等可读取的文字。扫描图片及图片内文字不支持。"),
+                  ("结果上限", "最多5000条命中，预览还有总量和单段长度限制；达到限制会提示，请缩小范围或细化搜索词。"),
+                  ("无法读取", "加密、损坏或无权限的文件会单独提示，不会阻止其他文件继续检索。")],
+        "example": "练习材料中，通知与备忘录均包含“项目甲”；选中左侧文件可在右侧查看各自的命中段落。",
+    },
+    "find_duplicates": {
+        "intro": "按实际内容查找完全重复的副本，在结果窗口中核对后批量整理。",
+        "quick": "① 添加待检查文件夹　② 查看重复组　③ 保留每组一份，确认后批量整理。",
+        "steps": ["添加一个或多个文件夹，点击“查找重复文件”。文件内容一致才分在同一组，文件名可以不同。",
+                  "展开分组查看文件名、完整地址、大小及修改时间；默认不勾选任何文件。",
+                  "逐个勾选，或点击“每组保留一份，勾选其余”；核对实际保留的路径，每组至少保留一份。",
+                  "选择移到整理目录或移入系统回收站，再核对确认清单。停止后已完成的操作会保留，失败项目会说明原因。"],
+        "terms": [("整理目录", "把勾选的副本移到指定目录，遇到重名自动编号，不覆盖已有文件。"),
+                  ("回收站", "使用系统回收站，之后可从系统回收站还原；系统不支持时只能移到整理目录。"),
+                  ("扫描后文件变化", "处理前重新核对文件及保留副本，发生变化或无法访问会跳过并提示，请重新扫描。")],
+        "example": "练习目录包含三份内容相同但名称不同的通知，另有一份不同内容的文件。扫描后只会把三份通知归为重复组。",
+    },
     "excel_compare": {
         "intro": "把同一批业务的两份数据按编号对应起来，找出新增、删除和金额等字段变化。",
         "quick": "① 添加旧表和新表　② 填写能唯一识别记录的“主键列”　③ 开始处理后查看差异清单。",
@@ -100,6 +124,18 @@ def build_example(mode, folder):
         old = book(folder / "01_旧表.xlsx", [head, ["0001", "张三", 100], ["0002", "李四", 200], ["0003", "王五", 300]])
         new = book(folder / "02_新表.xlsx", [head, ["0001", "张三", 120], ["0002", "李四", 200], ["0004", "赵六", 400]])
         return [old, new], {"key_columns": ["编号"], "header_row": 1, "numeric_tolerance": 0, "sheet_left": "", "sheet_right": "", "ignore_whitespace": True}
+    if mode in {"content_search", "find_duplicates"}:
+        directory = folder / "虚构练习材料"
+        directory.mkdir()
+        (directory / "通知.txt").write_text("关于项目甲的通知\n请于周五前提交项目甲的阶段材料。", encoding="utf-8")
+        if mode == "content_search":
+            (directory / "备忘录.txt").write_text("会议备忘录\n项目甲：补充附件，并核对材料清单。\n项目乙：按原计划推进。", encoding="utf-8")
+            return [str(directory)], {"query": "项目甲", "match_mode": "any", "case_sensitive": False, "password": "", "recursive": True}
+        content = (directory / "通知.txt").read_bytes()
+        (directory / "通知_副本.txt").write_bytes(content)
+        (directory / "另一份同内容.txt").write_bytes(content)
+        (directory / "不同材料.txt").write_text("此文件内容不同。", encoding="utf-8")
+        return [str(directory)], {"recursive": True}
     if mode == "excel_clean":
         source = book(folder / "待清洗数据.xlsx", [["编号", "姓名", "部门", "金额", "入职日期"],
             ["0001", " 张三 ", "综合部", "1,200.50", "2026/10/01"],

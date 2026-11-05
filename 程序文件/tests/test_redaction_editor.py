@@ -173,9 +173,9 @@ def test_structured_interface_preserves_newlines_tabs_and_nonbreaking_spaces(edi
 
 
 def test_legacy_plain_text_restores_unified_and_explicit_rules(editor):
-    editor.setPlainText("张三\n利安人寿=某公司\n原文=\n")
-    assert editor.option_rules() == (["张三"], [{"find": "利安人寿", "replace": "某公司"}, {"find": "原文", "replace": ""}])
-    assert editor.toPlainText() == "张三\n利安人寿=某公司\n原文="
+    editor.setPlainText("张三\n示例机构=某公司\n原文=\n")
+    assert editor.option_rules() == (["张三"], [{"find": "示例机构", "replace": "某公司"}, {"find": "原文", "replace": ""}])
+    assert editor.toPlainText() == "张三\n示例机构=某公司\n原文="
 
 
 def test_set_content_and_default_changes_preserve_legacy_round_trip(editor):

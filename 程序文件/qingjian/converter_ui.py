@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from .quick_actions import ACTIONS, MAX_INPUTS, parse_mime_payload
 from .quick_ui import clipboard_sources
 from .drag_wheel import DragWheelBridge
+from .icons import bind_window_icon, titlebar_badge_pixmap
 
 
 # Warm ivory surface, beige segments and a terracotta accent, in the spirit of
@@ -29,42 +30,61 @@ _IVORY, _SAND, _SAND_DARK, _INK, _MUTED = "#faf9f5", "#eeeae0", "#e4e0d4", "#3d3
 _CLAY, _CLAY_DARK, _CLAY_TINT = "#d97757", "#c2613f", "#f6e3d9"
 
 CONVERTER_STYLE = """
-QFrame#converterSurface { background: #faf9f5; border: 1px solid #e6e2d6; border-radius: 22px; }
+QFrame#converterSurface {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fbfaf7, stop:1 #f6f4ec);
+    border: 1px solid #e3dfd2; border-radius: 22px;
+}
 QFrame#converterHeader { border: none; background: transparent; }
-QLabel#converterTitle { font-size: 13px; font-weight: 600; color: #3d3929; }
-QLabel#converterCaption { font-size: 11px; color: #8a877d; background: transparent; }
-QLabel#converterSource { font-size: 11px; color: #5f5b4f; background: transparent; }
-QFrame#converterLine { background: #ece8de; border: none; max-height: 1px; }
-QPushButton#converterControl { background: transparent; border: none; border-radius: 10px;
-    min-width: 20px; max-width: 20px; min-height: 20px; max-height: 20px; padding: 1px; color: #8a877d; }
-QPushButton#converterControl:hover { background: #efece3; color: #3d3929; }
-QPushButton#converterControl:checked { color: #c2613f; }
-QPushButton#converterAction { background: #ffffff; border: 1px solid #e6e2d6; border-radius: 12px;
-    padding: 6px 11px; font-size: 11px; color: #5f5b4f; }
-QPushButton#converterAction:hover { background: #fdf6f2; border-color: #e5c1b0; color: #c2613f; }
+QLabel#converterTitle { font-size: 13px; font-weight: 600; color: #383425; }
+QLabel#converterCaption { font-size: 11px; color: #868277; background: transparent; }
+QLabel#converterSource { font-size: 11px; color: #585448; background: transparent; }
+QFrame#converterLine { background: #eae5da; border: none; max-height: 1px; }
+QPushButton#converterControl {
+    background: transparent; border: none; border-radius: 10px;
+    min-width: 20px; max-width: 20px; min-height: 20px; max-height: 20px; padding: 1px; color: #868277;
+}
+QPushButton#converterControl:hover { background: #ede9df; color: #383425; }
+QPushButton#converterControl:checked { color: #c2613f; background: #f5e6de; }
+QPushButton#converterAction {
+    background: #ffffff; border: 1px solid #e3dfd2; border-radius: 12px;
+    padding: 6px 11px; font-size: 11px; color: #585448;
+}
+QPushButton#converterAction:hover { background: #fdf5f0; border-color: #e2bca9; color: #bd5b39; }
+QPushButton#converterAction:pressed { background: #f9ebe3; }
 QPushButton#converterAction:disabled { color: #b9b5aa; background: #f4f2ec; border-color: #ebe7dd; }
-QPushButton#converterPrimary { background: #d97757; border: 1px solid #d97757; border-radius: 12px;
-    padding: 6px 12px; font-size: 11px; font-weight: 600; color: #ffffff; }
+QPushButton#converterPrimary {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #dc7a5a, stop:1 #cf6c4c);
+    border: 1px solid #d47050; border-radius: 12px;
+    padding: 6px 12px; font-size: 11px; font-weight: 600; color: #ffffff;
+}
 QPushButton#converterPrimary:hover { background: #c2613f; border-color: #c2613f; }
+QPushButton#converterPrimary:pressed { background: #b05333; border-color: #b05333; }
 QPushButton#converterPrimary:disabled { background: #e9c3b3; border-color: #e9c3b3; color: #ffffff; }
-QPushButton#converterTarget { background: transparent; border: none; border-radius: 12px;
-    padding: 0; font-size: 11px; font-weight: 600; color: #3d3929; }
+QPushButton#converterTarget {
+    background: transparent; border: none; border-radius: 12px;
+    padding: 0; font-size: 11px; font-weight: 600; color: #383425;
+}
 QPushButton#converterTarget:hover, QPushButton#converterTarget:focus { color: #c2613f; background: transparent; }
-QPushButton#converterTarget[active="true"] { color: #c2613f; }
+QPushButton#converterTarget[active="true"] { color: #bd5b39; }
 QPushButton#converterTarget:disabled { color: #b9b5aa; }
-QPushButton#converterCenter { background: #ffffff; border: 1px solid #e6e2d6; border-radius: 34px;
-    font-size: 11px; color: #c2613f; padding: 0; }
-QPushButton#converterCenter:hover { background: #fdf3ee; border-color: #e5c1b0; }
+QPushButton#converterCenter {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #fcfaf6);
+    border: 1px solid #e2ded1; border-radius: 34px;
+    font-size: 11px; font-weight: 600; color: #c2613f; padding: 0;
+}
+QPushButton#converterCenter:hover { background: #fdf3ee; border-color: #e3bda9; }
 QPushButton#converterCenter:disabled { color: #b9b5aa; }
-QPushButton#converterQuiet { background: transparent; border: none; border-radius: 9px; padding: 3px 7px;
-    font-size: 11px; color: #c2613f; }
-QPushButton#converterQuiet:hover { background: #f3efe6; }
+QPushButton#converterQuiet {
+    background: transparent; border: none; border-radius: 9px; padding: 3px 7px;
+    font-size: 11px; color: #c2613f;
+}
+QPushButton#converterQuiet:hover { background: #f1ede3; }
 QPushButton#converterQuiet:disabled { color: #b9b5aa; }
-QFrame#converterStatus { background: #f3f1ea; border: none; border-radius: 14px; }
-QLabel#converterStatusText { background: transparent; color: #5f5b4f; font-size: 11px; }
-QProgressBar#converterProgress { background: #e6e2d6; border: none; border-radius: 2px; height: 3px; }
+QFrame#converterStatus { background: #f1eee6; border: 1px solid #e7e3d8; border-radius: 14px; }
+QLabel#converterStatusText { background: transparent; color: #585448; font-size: 11px; }
+QProgressBar#converterProgress { background: #e4e0d3; border: none; border-radius: 2px; height: 3px; }
 QProgressBar#converterProgress::chunk { background: #d97757; border-radius: 2px; }
-QToolTip { background: #3d3929; color: #faf9f5; border: none; border-radius: 8px; padding: 6px 8px; }
+QToolTip { background: #383425; color: #faf9f5; border: none; border-radius: 8px; padding: 6px 8px; }
 """
 
 
@@ -297,34 +317,38 @@ class FormatRing(QWidget):
         self._rebuild()
 
     def _rebuild(self):
-        for button in self.buttons:
-            button.hide()
-            button.deleteLater()
-        self.buttons = []
-        count = len(self.visible_targets)
-        for index, target in enumerate(self.visible_targets):
-            # Catalogue glyphs are short format labels (PDF, PNG, EPUB), not
-            # decorative icons. Fall back to the full name for a generic glyph.
-            glyph = str(target.get("glyph") or "")
-            text = glyph if glyph and glyph not in {"图", "文", "转", "↗"} else str(target.get("title") or target["id"])
-            text = text.replace("转换为", "").replace("转为", "").strip()
-            if len(text) > 8:
-                text = text[:7] + "\n" + text[7:15] + ("…" if len(text) > 15 else "")
-            button = _button(text, "converterTarget",
-                             lambda checked=False, key=target["id"]: self.target_clicked.emit(key),
-                             str(target.get("title", "")) + "\n" + str(target.get("description", "")))
-            button.setParent(self)
-            angle = math.radians(-90 + index * 360 / max(1, count))
-            x, y = 122 + 85 * math.cos(angle), 122 + 85 * math.sin(angle)
-            button.setGeometry(round(x - 32), round(y - 16), 64, 32)
-            button.setEnabled(self.isEnabled())
-            button.installEventFilter(self)
-            button.show()
-            self.buttons.append(button)
-        self._hover = self.target_at(self._drag_position) if self._drag_active else -1
-        self._mouse_hover = -1
-        self._sync_active_labels()
-        self.center.raise_()
+        self.setUpdatesEnabled(False)
+        try:
+            for button in self.buttons:
+                button.hide()
+                button.deleteLater()
+            self.buttons = []
+            count = len(self.visible_targets)
+            for index, target in enumerate(self.visible_targets):
+                # Catalogue glyphs are short format labels (PDF, PNG, EPUB), not
+                # decorative icons. Fall back to the full name for a generic glyph.
+                glyph = str(target.get("glyph") or "")
+                text = glyph if glyph and glyph not in {"图", "文", "转", "↗"} else str(target.get("title") or target["id"])
+                text = text.replace("转换为", "").replace("转为", "").strip()
+                if len(text) > 8:
+                    text = text[:7] + "\n" + text[7:15] + ("…" if len(text) > 15 else "")
+                button = _button(text, "converterTarget",
+                                 lambda checked=False, key=target["id"]: self.target_clicked.emit(key),
+                                 str(target.get("title", "")) + "\n" + str(target.get("description", "")))
+                button.setParent(self)
+                angle = math.radians(-90 + index * 360 / max(1, count))
+                x, y = 122 + 85 * math.cos(angle), 122 + 85 * math.sin(angle)
+                button.setGeometry(round(x - 32), round(y - 16), 64, 32)
+                button.setEnabled(self.isEnabled())
+                button.installEventFilter(self)
+                button.show()
+                self.buttons.append(button)
+            self._hover = self.target_at(self._drag_position) if self._drag_active else -1
+            self._mouse_hover = -1
+            self._sync_active_labels()
+            self.center.raise_()
+        finally:
+            self.setUpdatesEnabled(True)
         self.page_changed.emit(self.page + 1, max(1, math.ceil(len(self.targets) / 8)))
         self.update()
 
@@ -542,6 +566,7 @@ class ConverterWindow(QWidget):
         super().__init__(None, Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint |
                          Qt.WindowType.WindowStaysOnTopHint)
         self.setWindowTitle("青简 · 独立格式转换")
+        bind_window_icon(self, "converter")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setStyleSheet(CONVERTER_STYLE)
         self.setAcceptDrops(True)
@@ -576,7 +601,12 @@ class ConverterWindow(QWidget):
         self.header.setFixedHeight(28)
         head = QHBoxLayout(self.header)
         head.setContentsMargins(0, 0, 0, 0)
-        head.setSpacing(3)
+        head.setSpacing(5)
+        badge = QLabel()
+        badge.setPixmap(titlebar_badge_pixmap("converter", 16))
+        badge.setFixedSize(16, 16)
+        badge.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        head.addWidget(badge)
         heading = _label("格式转换", "converterTitle")
         heading.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         head.addWidget(heading, 1)

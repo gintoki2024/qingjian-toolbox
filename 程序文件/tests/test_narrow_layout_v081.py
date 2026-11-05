@@ -32,6 +32,9 @@ def test_all_tool_actions_stay_horizontally_reachable_on_scaled_screens(width, t
                 assert window.source_bar.width() <= window.workspace_scroll.viewport().width(), (mode, expanded)
                 for control in (window.manage_button, window.settings_more, window.start_button,
                                 window.result_button, window.choose_output_button, window.compact_notebook):
+                    if control is window.choose_output_button and mode in {"content_search", "find_duplicates"}:
+                        assert not control.isVisible()
+                        continue
                     assert control.isVisible(), mode
                     x = control.mapTo(window, QPoint()).x()
                     assert 0 <= x and x + control.width() <= window.width(), (mode, control.text(), x, control.width())

@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QStyledItemDelegate, QStyle, QToolButton, QVBoxLayout, QWidget, QWidgetAction,
 )
 
+from .icons import bind_window_icon, titlebar_badge_pixmap
+
 
 PRIORITIES = {
     "low": ("低", "#8794a8"),
@@ -37,67 +39,75 @@ STYLE = """
 QWidget#notebookWindow, QWidget#notebookTasksWindow, QDialog#notebookEditor { color: #35374d; font-family: 'Microsoft YaHei UI', 'Microsoft YaHei'; }
 QFrame#notebookPanel QWidget { background: transparent; color: #44445a; font-size: 12px; }
 QFrame#notebookPanel QLabel, QDialog#notebookEditor QLabel { border: none; background: transparent; }
-QFrame#notebookPanel QLabel#notebookTitle { color: #37334c; font-size: 13px; font-weight: 600; }
+QFrame#notebookPanel QLabel#notebookTitle { color: #342f49; font-size: 13px; font-weight: 600; }
 QFrame#notebookPanel QLabel#notebookBrand { background: #8174c2; color: white; font-size: 17px; border-radius: 9px; }
-QFrame#notebookPanel QLabel#dateHeadline { color: #383247; font-size: 23px; font-weight: 600; }
-QFrame#notebookPanel QLabel#dateLunar { color: #898299; font-size: 11px; }
-QFrame#notebookPanel QLabel#sectionHeading { color: #50485e; font-size: 12px; font-weight: 600; }
-QFrame#notebookPanel QLabel#notebookFootnote { color: #9990a6; font-size: 10px; }
+QFrame#notebookPanel QLabel#dateHeadline { color: #342e44; font-size: 23px; font-weight: 600; }
+QFrame#notebookPanel QLabel#dateLunar { color: #867e96; font-size: 11px; }
+QFrame#notebookPanel QLabel#sectionHeading { color: #4c445b; font-size: 12px; font-weight: 600; }
+QFrame#notebookPanel QLabel#notebookFootnote { color: #968da3; font-size: 10px; }
 QFrame#notebookPanel QLabel#notebookError { color: #ae4759; font-size: 11px; }
 QFrame#notebookPanel QPushButton, QDialog#notebookEditor QPushButton {
-    background: rgba(255,255,255,115); border: 1px solid rgba(139,124,164,35);
-    border-radius: 7px; padding: 6px 10px; color: #746885; font-size: 11px;
+    background: rgba(255,255,255,145); border: 1px solid rgba(139,124,164,42);
+    border-radius: 7px; padding: 6px 10px; color: #6e6280; font-size: 11px;
 }
 QFrame#notebookPanel QPushButton:hover, QDialog#notebookEditor QPushButton:hover {
-    background: #f0eafa; border-color: #cfc0e3; color: #7960a5;
+    background: #f0eafa; border-color: #cbbbe2; color: #7258a0;
+}
+QFrame#notebookPanel QPushButton:pressed, QDialog#notebookEditor QPushButton:pressed {
+    background: #e6dcf6;
 }
 QFrame#notebookPanel QToolButton {
-    border: none; border-radius: 6px; padding: 3px; color: #8a8197; font-size: 15px;
+    border: none; border-radius: 6px; padding: 3px; color: #877e95; font-size: 15px;
 }
-QFrame#notebookPanel QToolButton:hover { background: rgba(135,107,183,26); color: #78599e; }
-QFrame#notebookPanel QToolButton:checked { background: rgba(135,107,183,30); color: #7653a1; }
+QFrame#notebookPanel QToolButton:hover { background: rgba(135,107,183,28); color: #74559b; }
+QFrame#notebookPanel QToolButton:checked { background: rgba(135,107,183,34); color: #724f9e; }
 QFrame#notebookPanel QToolButton#closeNotebook:hover { background: #f5dfe5; color: #b86377; }
 QFrame#notebookPanel QPushButton#newNotebookTask, QDialog#notebookEditor QPushButton#saveNotebookTask {
-    background: #8472bb; border: 1px solid #8472bb; color: white; font-weight: 600;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8472bb, stop:1 #9480c9);
+    border: 1px solid #806eb8; color: white; font-weight: 600;
 }
-QFrame#notebookPanel QPushButton#newNotebookTask:hover, QDialog#notebookEditor QPushButton#saveNotebookTask:hover { background: #7560ac; }
-QFrame#notebookPanel QPushButton#viewTab { background: transparent; border: none; padding: 6px 9px; color: #9a8da5; }
-QFrame#notebookPanel QPushButton#viewTab:checked { background: rgba(132,114,187,23); color: #7862a6; font-weight: 600; }
-QFrame#notebookPanel QPushButton#layoutMode { background: rgba(134,117,185,18); border: none; padding: 4px 8px; color: #87739d; font-size: 10px; }
+QFrame#notebookPanel QPushButton#newNotebookTask:hover, QDialog#notebookEditor QPushButton#saveNotebookTask:hover {
+    background: #7560ac; border-color: #6d58a4;
+}
+QFrame#notebookPanel QPushButton#viewTab { background: transparent; border: none; border-radius: 6px; padding: 6px 9px; color: #9689a2; }
+QFrame#notebookPanel QPushButton#viewTab:hover { color: #7862a6; background: rgba(132,114,187,12); }
+QFrame#notebookPanel QPushButton#viewTab:checked { background: rgba(132,114,187,25); color: #745da3; font-weight: 600; }
+QFrame#notebookPanel QPushButton#layoutMode { background: rgba(134,117,185,20); border: none; border-radius: 6px; padding: 4px 8px; color: #836f9a; font-size: 10px; }
+QFrame#notebookPanel QPushButton#layoutMode:hover { background: rgba(134,117,185,34); color: #6e5888; }
 QFrame#notebookPanel QLineEdit, QDialog#notebookEditor QLineEdit,
 QDialog#notebookEditor QPlainTextEdit, QDialog#notebookEditor QDateEdit,
 QDialog#notebookEditor QDateTimeEdit, QDialog#notebookEditor QTimeEdit, QDialog#notebookEditor QComboBox,
 QDialog#notebookEditor QSpinBox {
-    background: rgba(255,255,255,195); border: 1px solid #e5dfea; border-radius: 7px;
-    padding: 7px 8px; color: #494255; font-size: 12px; selection-background-color: #ddd1f3;
+    background: rgba(255,255,255,215); border: 1px solid #e2dcea; border-radius: 7px;
+    padding: 7px 8px; color: #463f52; font-size: 12px; selection-background-color: #ddd1f3;
 }
 QFrame#notebookPanel QLineEdit:focus, QDialog#notebookEditor QLineEdit:focus,
-QDialog#notebookEditor QPlainTextEdit:focus { border-color: #b39acb; }
+QDialog#notebookEditor QPlainTextEdit:focus { border-color: #af96c9; background: rgba(255,255,255,240); }
 QFrame#notebookPanel QLineEdit#notebookSearch { padding: 6px 9px; font-size: 11px; }
 QFrame#notebookPanel QComboBox, QFrame#notebookPanel QSpinBox {
-    border: none; background: transparent; padding: 3px; color: #6d607c; font-size: 12px;
+    border: none; background: transparent; padding: 3px; color: #6a5d79; font-size: 12px;
 }
 QComboBox::drop-down { border: none; width: 19px; }
-QFrame#notebookPanel QCheckBox, QDialog#notebookEditor QCheckBox { spacing: 5px; color: #8e829c; font-size: 11px; padding: 2px 0; }
-QCheckBox::indicator { width: 13px; height: 13px; border: 1px solid #cfc3dc; border-radius: 4px; background: rgba(255,255,255,150); }
-QCheckBox::indicator:checked { background: #9b83bf; border-color: #9b83bf; }
+QFrame#notebookPanel QCheckBox, QDialog#notebookEditor QCheckBox { spacing: 5px; color: #8a7e99; font-size: 11px; padding: 2px 0; }
+QCheckBox::indicator { width: 13px; height: 13px; border: 1px solid #ccc0da; border-radius: 4px; background: rgba(255,255,255,165); }
+QCheckBox::indicator:checked { background: #977fbd; border-color: #977fbd; }
 QFrame#notebookPanel QListWidget#notebookTasks { border: none; background: transparent; outline: none; padding: 0; }
 QFrame#notebookPanel QListWidget#notebookTasks::item { background: transparent; border: none; padding: 0; margin: 0 0 7px; }
 QFrame#notebookPanel QListWidget#notebookTasks::item:selected { background: transparent; }
-QFrame#notebookPanel QFrame#notebookTaskCard { background: rgba(255,255,255,136); border: 1px solid rgba(184,169,202,42); border-radius: 9px; }
-QFrame#notebookPanel QLabel#taskTitle { color: #55495f; font-size: 12px; font-weight: 600; }
-QFrame#notebookPanel QLabel#taskDetail { color: #a396ac; font-size: 10px; }
-QFrame#notebookPanel QToolButton#taskAction { color: #9c8bab; font-size: 13px; }
+QFrame#notebookPanel QFrame#notebookTaskCard { background: rgba(255,255,255,148); border: 1px solid rgba(184,169,202,48); border-radius: 9px; }
+QFrame#notebookPanel QLabel#taskTitle { color: #51455b; font-size: 12px; font-weight: 600; }
+QFrame#notebookPanel QLabel#taskDetail { color: #9f92a9; font-size: 10px; }
+QFrame#notebookPanel QToolButton#taskAction { color: #9887a8; font-size: 13px; }
 QFrame#notebookPanel QCalendarWidget { background: transparent; border: none; }
 QFrame#notebookPanel QCalendarWidget QAbstractItemView { border: none; background: transparent; selection-background-color: transparent; outline: none; }
 QScrollBar:vertical { background: transparent; width: 4px; margin: 0; }
-QScrollBar::handle:vertical { background: #d9cfe1; border-radius: 2px; min-height: 25px; }
+QScrollBar::handle:vertical { background: #d6cce0; border-radius: 2px; min-height: 25px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QDialog#notebookEditor { background: #f8f5fb; }
 QDialog#notebookEditor QScrollArea, QDialog#notebookEditor QWidget#editorBody { background: transparent; border: none; }
-QDialog#notebookEditor QLabel#editorHeading { color: #51415f; font-size: 20px; font-weight: 600; }
-QDialog#notebookEditor QLabel#editorHint { color: #9b8ba7; font-size: 11px; }
+QDialog#notebookEditor QLabel#editorHeading { color: #4d3d5b; font-size: 20px; font-weight: 600; }
+QDialog#notebookEditor QLabel#editorHint { color: #9686a3; font-size: 11px; }
 QDialog#notebookEditor QLabel#editorError { color: #b7546a; font-size: 11px; }
 """
 
@@ -218,7 +228,7 @@ class _GlassPanel(QFrame):
 class _TitleBar(QFrame):
     def __init__(self, window):
         super().__init__(window)
-        self.window = window
+        self._owner_window = window
         self._drag_position = None
 
     def mousePressEvent(self, event):
@@ -227,16 +237,16 @@ class _TitleBar(QFrame):
             # startSystemMove can consume release inside its own Windows loop.
             try:
                 from .glass import suspend_glass
-                suspend_glass(self.window)
+                suspend_glass(self._owner_window)
             except (ImportError, RuntimeError):
                 pass
             self.grabMouse()
-            self._drag_position = event.globalPosition().toPoint() - self.window.frameGeometry().topLeft()
+            self._drag_position = event.globalPosition().toPoint() - self._owner_window.frameGeometry().topLeft()
             event.accept()
 
     def mouseMoveEvent(self, event):
         if self._drag_position is not None and event.buttons() & Qt.MouseButton.LeftButton:
-            self.window.move(event.globalPosition().toPoint() - self._drag_position)
+            self._owner_window.move(event.globalPosition().toPoint() - self._drag_position)
             event.accept()
 
     def mouseReleaseEvent(self, event):
@@ -244,7 +254,7 @@ class _TitleBar(QFrame):
         self.releaseMouse()
         try:
             from .glass import resume_glass
-            resume_glass(self.window)
+            resume_glass(self._owner_window)
         except (ImportError, RuntimeError):
             pass
 
@@ -253,7 +263,7 @@ class _TitleBar(QFrame):
             self._drag_position = None
             try:
                 from .glass import resume_glass
-                resume_glass(self.window)
+                resume_glass(self._owner_window)
             except (ImportError, RuntimeError):
                 pass
         return super().event(event)
@@ -418,6 +428,7 @@ class TaskEditorDialog(QDialog):
         self.saved_task = None
         self.setObjectName("notebookEditor")
         self.setWindowTitle("编辑事项" if task else "添加事项")
+        bind_window_icon(self, "notebook")
         self.setStyleSheet(STYLE)
         self.resize(440, 635)
         self.setMinimumSize(380, 500)
@@ -711,9 +722,16 @@ class _TaskDelegate(QStyledItemDelegate):
                              painter.fontMetrics().elidedText(body[0], Qt.TextElideMode.ElideRight, text_width))
         font.setPixelSize(11)
         painter.setFont(font)
-        painter.setPen(QColor("#9e8caf"))
-        painter.drawText(self.action_rect(option.rect, "edit"), Qt.AlignmentFlag.AlignCenter, "改")
-        painter.drawText(self.action_rect(option.rect, "delete"), Qt.AlignmentFlag.AlignCenter, "×")
+        edit_rect = self.action_rect(option.rect, "edit")
+        delete_rect = self.action_rect(option.rect, "delete")
+        if hover:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(135, 107, 183, 18))
+            painter.drawRoundedRect(QRectF(edit_rect.adjusted(2, 2, -2, -2)), 5, 5)
+            painter.drawRoundedRect(QRectF(delete_rect.adjusted(2, 2, -2, -2)), 5, 5)
+        painter.setPen(QColor("#80689c" if hover else "#9e8caf"))
+        painter.drawText(edit_rect, Qt.AlignmentFlag.AlignCenter, "改")
+        painter.drawText(delete_rect, Qt.AlignmentFlag.AlignCenter, "×")
         painter.restore()
 
     def editorEvent(self, event, model, option, index):
@@ -742,6 +760,7 @@ class _TasksWindow(QWidget):
         self.setObjectName("notebookTasksWindow")
         self.setWindowTitle("青简 · 当天事项")
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
+        bind_window_icon(self, "tasks")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setStyleSheet(STYLE)
         self.setMinimumSize(320, 280)
@@ -793,6 +812,7 @@ class NotebookWindow(QWidget):
         self.setObjectName("notebookWindow")
         self.setWindowTitle("青简 · 日历记事")
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
+        bind_window_icon(self, "notebook")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setStyleSheet(STYLE)
         root = QVBoxLayout(self)
@@ -826,10 +846,10 @@ class NotebookWindow(QWidget):
         bar = _TitleBar(window)
         row = QHBoxLayout(bar)
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(4)
-        dot = QLabel("●")
-        dot.setStyleSheet("color: #a28bc5; font-size: 9px;")
-        dot.setFixedWidth(10)
+        row.setSpacing(5)
+        dot = QLabel()
+        dot.setPixmap(titlebar_badge_pixmap("tasks" if companion else "notebook", 15))
+        dot.setFixedSize(16, 16)
         dot.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         row.addWidget(dot)
         label = QLabel(text)

@@ -84,15 +84,15 @@ TOOLS = {
                 field("group_by", "归档分类", "choice", "none", choices=[("不分类", "none"), ("按扩展名", "extension"), ("按修改年月", "month"), ("按文件名匹配分组", "pattern")]),
                 field("group_pattern", "分组正则", placeholder="第一个捕获组作为分类名", when=("group_by", ["pattern"])), RECURSIVE]),
     "content_search": dict(title="文件夹全文检索", nav="文件全文检索", group="文件管理", extensions=TEXT_TYPES,
-        description="在多个文件或文件夹中搜索文字，输出命中位置及上下文。",
-        note="支持DOCX、电子PDF、XLSX、CSV、TXT和HTML等。按段落、PDF页或工作表行定位；不识别扫描图片。最多输出5000条命中，达到上限会提示。",
+        description="检索多个文件或文件夹，在窗口左侧查看文件，右侧阅读命中段落。",
+        note="支持DOCX、电子PDF、XLSX、CSV、TXT和HTML等。单击文件查看关键词及段落、页码或工作表行；不识别扫描图片。结果仅在窗口显示，最多5000条命中，达到上限会提示。",
         fields=[field("query", "搜索词（每行一个）", "multiline", "", placeholder="例如：项目名称\n合同编号"),
                 field("match_mode", "匹配条件", "choice", "any", choices=[("包含任一搜索词", "any"), ("同时包含全部搜索词", "all")]),
                 field("case_sensitive", "区分英文字母大小写", "bool", False),
                 field("password", "PDF密码", "password", ""), RECURSIVE]),
     "find_duplicates": dict(title="重复文件查找", nav="重复文件查找", group="文件管理", extensions=None,
-        description="按文件实际内容识别完全重复的文件，输出分组清单。",
-        note="先按大小筛选，再校验文件内容；文件名不同也能识别。不自动删除文件，清单包含路径与大小，供人工处理。",
+        description="在窗口中按组查看内容完全相同的文件，勾选后批量整理或移入回收站。",
+        note="先按大小筛选，再校验文件内容；文件名不同也能识别。默认不勾选，每组至少保留一份；处理前展示确认清单，不覆盖已有文件。不支持永久删除。",
         fields=[RECURSIVE]),
     "check_materials": dict(title="材料完整性检查", nav="材料完整性", group="文件管理", extensions=None,
         description="按自定义材料清单检查缺件，并核对表格中的必填列和空值。",
@@ -109,7 +109,9 @@ TOOLS["workflow"] = dict(title="组合流程", nav="组合流程", group="常用
 WORKFLOW_CHOICES = [("表格合并与拆分", "excel_merge"), ("数据清洗与检查", "excel_clean"),
                     ("模板批量生成", "template_fill"), ("Word转PDF", "word_to_pdf"),
                     ("图片压缩或合成PDF", "image_pack"), ("PDF页面整理", "pdf_pages"),
-                    ("文件复制归档", "file_organize")]
+                    ("文件复制归档", "file_organize"), ("Word章节合并与拆分", "word_chapters"),
+                    ("文档导出与图片提取", "document_export"), ("表格打印排版与PDF", "excel_print"),
+                    ("PDF压缩与标记", "pdf_finish"), ("报送材料装订", "submission_bind")]
 
 TOOLS["word_to_pdf"] = dict(title="Word转PDF", nav="Word转PDF", group="流程步骤", extensions={".docx", ".doc", ".rtf"},
     note="使用随附的离线排版引擎，原文件保留。", description="", fields=[])

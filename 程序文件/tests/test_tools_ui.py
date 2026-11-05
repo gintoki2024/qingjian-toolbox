@@ -144,8 +144,11 @@ class AdvancedUITests(unittest.TestCase):
             self.assertEqual(window.settings.currentIndex(), MODES.index(mode))
             self.assertTrue(window.start_button.isVisible())
             self.assertIsInstance(window.get_options(), dict)
-            bottom = window.workspace_scroll.mapTo(window, QPoint(0, window.workspace_scroll.height())).y()
-            self.assertGreater(window.output_edit.mapTo(window, QPoint(0, 0)).y(), bottom)
+            if mode in {"content_search", "find_duplicates"}:
+                self.assertFalse(window.output_edit.isVisible())
+            else:
+                bottom = window.workspace_scroll.mapTo(window, QPoint(0, window.workspace_scroll.height())).y()
+                self.assertGreater(window.output_edit.mapTo(window, QPoint(0, 0)).y(), bottom)
         self.assertEqual(len(MODES), 27)
         window.close()
 

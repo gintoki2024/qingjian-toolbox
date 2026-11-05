@@ -162,10 +162,21 @@ def test_all_twenty_seven_tools_keep_action_bar_visible_at_minimum_window_size(o
         pump(desktop_application)
         assert window.settings.currentIndex() == MODES.index(mode)
         assert window.queue_panel.isHidden()
-        for control in (window.start_button, window.output_edit, window.choose_output_button):
+        controls = [window.start_button, window.result_button]
+        if mode in {"content_search", "find_duplicates"}:
+            # Interactive results stay in their own windows and do not export
+            # reports, so these two modes deliberately have no output path.
+            assert window.output_row_widget.isHidden(), mode
+            assert not window.output_edit.isVisible(), mode
+            assert not window.choose_output_button.isVisible(), mode
+        else:
+            assert window.output_row_widget.isVisible(), mode
+            controls.extend((window.output_edit, window.choose_output_button))
+        for control in controls:
             assert control.isVisible(), mode
             rectangle = QRect(control.mapTo(window, QPoint(0, 0)), control.size())
             assert window.rect().contains(rectangle), (mode, rectangle, window.rect())
+        assert window.worker is None and not window._busy, mode
         assert window.workspace_scroll.horizontalScrollBar().maximum() == 0, mode
 
 

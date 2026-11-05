@@ -13,6 +13,8 @@ import pytest
 
 import startup_shared as shared
 
+from startup_fixtures import real_venv
+
 
 PROJECT = Path(__file__).resolve().parents[1]
 
@@ -384,13 +386,12 @@ def test_cmd_with_python_discovery_disabled_restores_the_remembered_interpreter(
     version = ".".join(map(str, sys.version_info[:3]))
     if mode == "managed":
         # Exercise a real Windows venv redirector, not a fake executable or
-        # patched probe. Its standard library comes from the existing base.
-        python = home / ("python-" + version) / "python.exe"
-        python.parent.mkdir(parents=True)
-        shutil.copy2(sys.executable, python)
-        (python.parent / "pyvenv.cfg").write_text(
-            "home = " + sys.base_prefix + "\ninclude-system-site-packages = false\nversion = " + version + "\n",
-            encoding="utf-8")
+        # patched probe. The supported managed cache records its real location
+        # beneath the chosen home, so neither system discovery nor a download
+        # is needed when restoring this selection in a new source release.
+        python = real_venv(home / ("python-" + version))
+        (home / "python-selection.json").write_text(
+            json.dumps({"python": str(python)}), encoding="utf-8")
     assert shared.remember_runtime(old, python, home, engine, {}, mode=mode)
     old_wrapper = old.parents[1]
     assert old_wrapper.resolve().is_relative_to(tmp_path.resolve())
@@ -419,7 +420,8 @@ def startup_selection(project):
     return json.loads(path.read_text(encoding='utf-8-sig')) if path.exists() else None
 def selected_interpreter(project,home):
     version=json.loads((project/'runtime-sources.json').read_text(encoding='utf-8-sig'))['python']['version']
-    return Path(home)/('python-'+version)/'python.exe'
+    cached=Path(home)/'python-selection.json'
+    return Path(json.loads(cached.read_text(encoding='utf-8-sig'))['python']) if cached.exists() else Path(home)/('python-'+version)/'python.exe'
 def check_environment(project,python,home):
     return dict(ready=True,supported=True,engine='fixture',native_components={})
 def ready_environment(project,python,home,engine,native_components):

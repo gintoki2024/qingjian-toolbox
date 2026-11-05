@@ -38,3 +38,14 @@ def desktop_application():
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     app.processEvents()
     app.shutdown()
+
+
+@pytest.fixture(autouse=True)
+def finish_deferred_widgets(desktop_application):
+    # processEvents() alone does not deliver DeferredDelete without app.exec().
+    # Dispose widgets whose own fixture already called deleteLater, so closed
+    # main windows and their application event filters cannot accumulate across
+    # the full suite. No still-owned widget or worker is forcibly destroyed.
+    yield
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    desktop_application.processEvents()

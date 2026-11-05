@@ -157,11 +157,15 @@ class CompactInputUITests(unittest.TestCase):
                 self.assertTrue(window.queue_panel.isHidden())
                 self.assertFalse(window.table.isVisible())
                 for control in (window.start_button, window.output_edit, window.choose_output_button):
+                    if mode in {"content_search", "find_duplicates"} and control in (window.output_edit, window.choose_output_button):
+                        self.assertFalse(control.isVisible())
+                        continue
                     self.assertTrue(control.isVisible())
                     bounds = QRect(control.mapTo(window, QPoint(0, 0)), control.size())
                     self.assertTrue(window.rect().contains(bounds), f"{mode}: action is clipped")
-                workspace_bottom = window.workspace_scroll.mapTo(window, QPoint(0, window.workspace_scroll.height())).y()
-                self.assertGreater(window.output_edit.mapTo(window, QPoint(0, 0)).y(), workspace_bottom)
+                if mode not in {"content_search", "find_duplicates"}:
+                    workspace_bottom = window.workspace_scroll.mapTo(window, QPoint(0, window.workspace_scroll.height())).y()
+                    self.assertGreater(window.output_edit.mapTo(window, QPoint(0, 0)).y(), workspace_bottom)
 
     def test_busy_blocks_queue_mutations_and_both_drop_surfaces(self):
         window = self.window

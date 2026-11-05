@@ -272,7 +272,7 @@ def test_template_ui_uses_safe_title_name_and_helper_refuses_overwrite(official_
         fields = dialog.findChildren(QLineEdit)
         assert len(fields) == 3
         fields[0].setText(title)
-        fields[1].setText("利安人寿保险股份有限公司")
+        fields[1].setText("示例办公科技股份有限公司")
         fields[2].setText("2026年10月29日")
         return QDialog.DialogCode.Accepted
 
@@ -291,3 +291,24 @@ def test_template_ui_uses_safe_title_name_and_helper_refuses_overwrite(official_
         save_official_template(target, window.official_panel.options(), "新的标题", "其他单位", "2026年10月30日", "通知")
     assert target.read_bytes() == original
     assert not list(folder.glob(".qingjian-write-*"))
+
+
+def test_neutral_official_defaults_and_existing_custom_name_roundtrip(official_window, tmp_path):
+    panel = official_window.official_panel
+    panel.set_options({})
+    assert [panel.profile.itemText(index) for index in range(panel.profile.count())] == [
+        "通用公文格式", "自定义公文格式",
+    ]
+    assert panel.controls["company_name"].text() == ""
+    assert panel.options()["company_name"] == ""
+    target = tmp_path / "中性公文样板.docx"
+    save_official_template(target, panel.options(), "关于示例工作的通知", "", "", "通知")
+    loaded = Document(target)
+    assert loaded.paragraphs[-2].text == "【发文单位署名】"
+    assert not any("有限公司" in paragraph.text for paragraph in loaded.paragraphs)
+    configured = {"profile": "company", "company_name": "用户自定示例单位", "custom_terms": "示例别称=用户自定示例单位"}
+    panel.set_options(configured)
+    assert panel.profile.currentText() == "通用公文格式"
+    assert panel.options()["profile"] == "company"
+    assert panel.options()["company_name"] == configured["company_name"]
+    assert panel.options()["custom_terms"] == configured["custom_terms"]

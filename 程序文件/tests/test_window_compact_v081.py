@@ -62,6 +62,9 @@ def test_small_tool_pages_keep_source_and_actions_inside_window(window):
         assert window.width() == 410, mode
         assert window.settings_more.isVisible(), mode
         for control in (window.start_button, window.output_edit, window.choose_output_button, window.result_button):
+            if mode in {"content_search", "find_duplicates"} and control in (window.output_edit, window.choose_output_button):
+                assert not control.isVisible(), mode
+                continue
             assert control.isVisible(), mode
             assert window.rect().contains(bounds(control, window)), mode
         assert window.source_bar.width() <= window.workspace_scroll.viewport().width(), mode

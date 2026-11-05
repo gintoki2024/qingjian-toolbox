@@ -1,4 +1,5 @@
 """First-run destination choices, portable routing and no-download cancellation."""
+import importlib.util
 import json
 import os
 import shutil
@@ -133,10 +134,41 @@ def run_native(command, **kwargs):
                           timeout=60, env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), **kwargs)
 
 
-def test_packed_source_check_only_resolves_internal_project_and_does_not_write(source, tmp_path):
-    compiler()
+@pytest.fixture(scope="module")
+def historical_launchers(tmp_path_factory):
+    """Compile preserved launchers only into the owned test directory.
+
+    CMD source releases do not distribute these executables. Testing their
+    retained compatibility route must not add EXEs or rewrite build-info.json
+    in the product source tree.
+    """
+    csc = compiler()
+    folder = tmp_path_factory.mktemp("historical-csharp-launchers")
+    spec = importlib.util.spec_from_file_location(
+        "historical_launcher_build_fixture", bootstrap.PROJECT / "launcher/build_launcher.py")
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    references = ["System.dll", "System.Core.dll", "System.Drawing.dll", "System.Windows.Forms.dll",
+                  "System.Web.Extensions.dll", "System.IO.Compression.dll", "System.IO.Compression.FileSystem.dll"]
+    result = {}
+    for key, name, identity in (("source", "SourceLauncher.cs", "SourceLauncher"),
+                                ("portable", "PortableLauncher.cs", "PortableLauncher")):
+        manifest = folder / (key + ".manifest")
+        manifest.write_text(builder.MANIFEST.replace("Qingjian.SourceLauncher", "Qingjian." + identity),
+                            encoding="utf-8")
+        target = folder / (key + ".exe")
+        built = run_native([csc, "/nologo", "/target:winexe", "/platform:anycpu", "/optimize+",
+                            "/utf8output", "/codepage:65001", "/win32manifest:" + str(manifest),
+                            "/out:" + str(target), *["/reference:" + item for item in references],
+                            bootstrap.PROJECT / "launcher" / name])
+        assert built.returncode == 0, built.stdout + built.stderr
+        result[key] = target
+    return result
+
+
+def test_packed_source_check_only_resolves_internal_project_and_does_not_write(source, tmp_path, historical_launchers):
     launcher = source.parent / "启动青简工具箱.exe"
-    shutil.copy2(bootstrap.PROJECT / launcher.name, launcher)
+    shutil.copy2(historical_launchers["source"], launcher)
     home = tmp_path / "未创建的运行环境"
     result = run_native([launcher, "--check-only", "--no-discovery", "--python", sys.executable, "--runtime-home", home])
     assert result.returncode == 0, result.stdout + result.stderr
@@ -147,10 +179,9 @@ def test_packed_source_check_only_resolves_internal_project_and_does_not_write(s
     assert not (source / "config").exists()
 
 
-def test_managed_headless_check_does_not_discover_system_python(source, tmp_path):
-    compiler()
+def test_managed_headless_check_does_not_discover_system_python(source, tmp_path, historical_launchers):
     launcher = source.parent / "启动青简工具箱.exe"
-    shutil.copy2(bootstrap.PROJECT / launcher.name, launcher)
+    shutil.copy2(historical_launchers["source"], launcher)
     home = tmp_path / "未部署"
     # A one-off explicit choice must override a previously saved reuse mode.
     write_choice(source, tmp_path / "旧位置", python=sys.executable)
@@ -161,14 +192,14 @@ def test_managed_headless_check_does_not_discover_system_python(source, tmp_path
     assert not home.exists()
 
 
-@pytest.mark.parametrize("starter", ["启动青简工具箱.exe", "launcher/portable/启动青简工具箱.exe"])
-def test_portable_launcher_skips_manifest_and_propagates_arguments_and_exit_code(tmp_path, starter):
+@pytest.mark.parametrize("starter", ["source", "portable"])
+def test_portable_launcher_skips_manifest_and_propagates_arguments_and_exit_code(tmp_path, starter, historical_launchers):
     csc = compiler()
     package = tmp_path / "完整包"
     internal = package / "程序文件"
     internal.mkdir(parents=True)
     launcher = package / "启动青简工具箱.exe"
-    shutil.copy2(bootstrap.PROJECT / starter, launcher)
+    shutil.copy2(historical_launchers[starter], launcher)
     fake = tmp_path / "portable.cs"
     fake.write_text('using System;using System.IO;class P{static int Main(string[] a){'
                     'if(a.Length!=2||a[0]!="--record")return 29;File.WriteAllText(a[1],'

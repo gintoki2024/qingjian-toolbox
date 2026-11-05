@@ -16,31 +16,44 @@ from PySide6.QtWidgets import (
 from .home_content import ContentRotation, ContentSnapshot, HomeContentStore, scan_content, upcoming_reminders
 
 _STYLE = """
-QFrame#personalHome { background:#ffffff; border:1px solid #dce0e9; border-radius:18px; }
-QFrame#personalHome QLabel { background:transparent; border:none; }
-QLabel#personalTitle { color:#3a4358; font-size:12px; font-weight:600; }
-QLabel#personalMeta { color:#9098a8; font-size:10px; }
-QLabel#personalNotice { color:#8e714e; font-size:10px; }
-QLabel#personalEmpty { color:#8a93a3; font-size:11px; padding:4px; }
-QLabel#personalQuote { color:#4a5064; padding:10px 18px; }
-QFrame#personalQuoteBox { background:#f8f8fb; border:none; border-radius:14px; }
-QFrame#personalReminders { background:transparent; border:none; }
-QWidget#personalImageBar { background:transparent; border:none; }
-QWidget#personalImageBar QLabel { color:#6f7688; }
-QToolButton#personalAction { border:none; border-radius:9px; background:transparent;
-    color:#8a85a3; padding:2px 7px; font-size:10px; }
-QToolButton#personalAction:hover { background:#f1effa; color:#5c4f91; }
-QToolButton#personalAction:disabled { color:#c4c8d2; }
-QWidget#personalImageBar QToolButton#personalAction { color:#6b6488; background:rgba(255,255,255,170);
-    border-radius:10px; min-width:16px; font-size:12px; }
-QWidget#personalImageBar QToolButton#personalAction:hover { background:#ffffff; color:#4f4386; }
-QWidget#personalImageBar QToolButton#personalAction:disabled { color:#c0c3cd; background:rgba(255,255,255,90); }
-QFrame#personalTabs { background:#f3f3f8; border:none; border-radius:12px; }
-QToolButton#personalTab { border:none; border-radius:9px; background:transparent;
-    color:#858c9c; padding:2px 11px; font-size:10px; }
-QToolButton#personalTab:hover { color:#5d5290; }
-QToolButton#personalTab:checked { background:#ffffff; color:#574a8a; font-weight:600; }
-QFrame#personalDivider { background:#eceef4; border:none; }
+QFrame#personalHome {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #fcfdff);
+    border: 1px solid #dae0ec; border-radius: 18px;
+}
+QFrame#personalHome QLabel { background: transparent; border: none; }
+QLabel#personalTitle { color: #313a50; font-size: 12px; font-weight: 600; }
+QLabel#personalMeta { color: #8891a3; font-size: 10px; }
+QLabel#personalNotice { color: #8c6d46; font-size: 10px; }
+QLabel#personalEmpty { color: #848ea0; font-size: 11px; padding: 4px; }
+QLabel#personalQuote { color: #40485e; padding: 10px 18px; }
+QFrame#personalQuoteBox {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #f8f8fc, stop:1 #f3f4fa);
+    border: 1px solid #eceef6; border-radius: 14px;
+}
+QFrame#personalReminders { background: transparent; border: none; }
+QWidget#personalImageBar { background: transparent; border: none; }
+QWidget#personalImageBar QLabel { color: #687084; }
+QToolButton#personalAction {
+    border: none; border-radius: 9px; background: transparent;
+    color: #7f7a9c; padding: 2px 7px; font-size: 10px;
+}
+QToolButton#personalAction:hover { background: #efecfa; color: #54468c; }
+QToolButton#personalAction:pressed { background: #e5e0f7; }
+QToolButton#personalAction:disabled { color: #c4c8d2; }
+QWidget#personalImageBar QToolButton#personalAction {
+    color: #655e84; background: rgba(255, 255, 255, 185);
+    border-radius: 10px; min-width: 16px; font-size: 12px;
+}
+QWidget#personalImageBar QToolButton#personalAction:hover { background: #ffffff; color: #493d82; }
+QWidget#personalImageBar QToolButton#personalAction:disabled { color: #c0c3cd; background: rgba(255, 255, 255, 95); }
+QFrame#personalTabs { background: #f1f2f8; border: 1px solid #e8eaf2; border-radius: 12px; }
+QToolButton#personalTab {
+    border: none; border-radius: 9px; background: transparent;
+    color: #7e8698; padding: 2px 11px; font-size: 10px;
+}
+QToolButton#personalTab:hover { color: #564a8e; }
+QToolButton#personalTab:checked { background: #ffffff; color: #514488; font-weight: 600; }
+QFrame#personalDivider { background: #eceef4; border: none; }
 """
 _PRIORITY = {"urgent": ("紧急", "#b96570"), "important": ("重要", "#b38c45"),
              "normal": ("普通", "#7a88b0"), "low": ("低", "#7c9d91")}
@@ -360,7 +373,7 @@ class PersonalHomePanel(QFrame):
         self.snapshot = ContentSnapshot()
         self._notebook_store = None
         self._reminder_token = None
-        self._compact = True
+        self._compact = None
         self._scan_token = self._image_token = 0
         self._jobs = {}
         self._image_cache = OrderedDict()
@@ -490,7 +503,10 @@ class PersonalHomePanel(QFrame):
         return self.store.settings
 
     def set_compact(self, compact):
-        self._compact = bool(compact)
+        compact = bool(compact)
+        if self._compact == compact:
+            return
+        self._compact = compact
         # A minimum keeps the pane readable; any extra window height goes to it.
         height = 190 if compact else 260
         for widget in (self.image_view, self.quote_box, self.reminders, self.empty):

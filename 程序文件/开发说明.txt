@@ -1,3 +1,22 @@
+0.11.1 记事标题栏与全局吸附兼容修正
+
+用户GUI日志已定位window_snap.eventFilter调用watched.window()抛出TypeError。Notebook _TitleBar把所属窗体存为self.window，遮蔽了继承方法；原测试只验证注册与转换拖动，未覆盖两个记事标题栏的真实输入。
+私有字段改为_owner_window；全局过滤器改调QWidget.window(watched)，兼容其他历史/自定义组件同名字段。register_notebook_windows在owned_windows之外补注册companion_windows，包含合并模式下暂时隐藏的事项窗。
+仅三处业务文件发生修复；保留事项schema、存储路径、提醒时分、定期提醒、玻璃效果与启动/环境补齐逻辑。tests/test_notebook_snap.py覆盖双标题栏输入、开启/关闭吸附、透明度与布局切换，test_window_snap补同名字段兼容回归。
+增量测试按变更范围运行，常规修复不重复全部办公/启动回归；依赖/启动变更和阶段发布再扩大对应验证。
+
+青简工具箱0.11.0 窗口外观与交互结果
+
+本轮只构建轻量源码包，完整运行包与GitHub等待用户后续指令。不改变bootstrap依赖、下载版本/校验清单、首次位置选择及CMD生命周期。
+window_appearance.py管理全局整窗opacity与snap_enabled，appearance.json和profile.json同目录，原子写入；默认100%不透明、吸附开启。通过应用内Show事件覆盖后续弹窗，不记录文档内容。记事玻璃面板的独立设置不迁移、不覆盖。
+window_snap.py仅注册本应用顶层窗口，通过Qt主动鼠标拖动与Windows WM_MOVING进行边缘修正。原生主窗nativeEvent显式转发，DPI按Qt DPR换算，旧Win10没有GetDpiForWindow仍可降级。隐窗、最小化/最大化、程序定位与缩放不吸附，Alt临时绕过；退出释放Qt/native filter。
+core/search_session.py及search_ui.py在内存中管理文件列表、命中段落与关键词定位；按后台线程流式追加文件，最多5000条命中及8Mi字符预览，单段32K字符，截断显式提示。预览纯文本，UTF-16定位兼容emoji，关闭清理正文，不写history。旧content_ops导出入口保留兼容，主窗不再调用。
+core/duplicate_session.py及duplicates_ui.py先按大小后SHA256检索重复，在结果窗口勾选、复核后整理/回收。链接、联接、硬链接不作为可处理副本。移动使用独占创建、校验目标、重新校验保留项和源后移除原副本；回收站调用QFile，不永久删除降级。确认窗口返回后再次检查全应用执行槽。
+app.Window持有独立非模态结果窗口，主窗关闭不强制隐藏它们；main._interactive_owner与_busy共享转换执行槽。busy_changed(False)只在QThread.finished后发出。普通主窗关闭等待交互任务结束，aboutToQuit统一取消并等待，禁止QThread.terminate。NotebookController.window_created注册日历与事项两个顶层窗。
+新增/修改测试以tests/test_interactive_integration.py、test_search_session/ui、test_duplicate_session/duplicates_ui、test_window_appearance、test_window_snap为主，保留相关布局/工作台/启动回归。真实办公文件不得用于测试、截图或分发。
+
+以下为历史开发记录：
+
 青简工具箱0.10.3 共享组件部署修正
 
 startup_shared.py仅使用标准库，负责包外默认目录、跨版本小型路径索引、受限旧目录发现和带字节校验的组件复制。默认逐层跳过已知“程序文件/青简工具箱源码/青简工具箱_v...”包装，在其外同盘建议青简共享环境。成功ready_environment后记录实际解释器、home、引擎及native映射；索引最多16条，原子替换并用进程文件锁串行更新。QINGJIAN_SHARED_RUNTIME_INDEX供隔离验证，正常位置为用户数据目录，仅存元数据。

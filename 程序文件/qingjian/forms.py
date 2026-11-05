@@ -4,10 +4,11 @@ from __future__ import annotations
 import math
 import re
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (QWidget, QFormLayout, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPlainTextEdit, QCheckBox, QComboBox, QSpinBox, QDoubleSpinBox, QPushButton, QFileDialog,
-    QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget)
+    QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget, QScrollArea, QFrame, QSizePolicy,
+    QMessageBox)
 
 from .catalog import TOOLS, WORKFLOW_CHOICES
 from .guides import GUIDES
@@ -27,7 +28,7 @@ def split_columns(text):
 class OptionPanel(QWidget):
     changed = Signal()
 
-    def __init__(self, mode, parent=None):
+    def __init__(self, mode, parent=None, *, wrap_long_rows=False):
         super().__init__(parent)
         self.mode, self.controls, self.rows = mode, {}, {}
         self.spec = TOOLS[mode]
@@ -40,6 +41,8 @@ class OptionPanel(QWidget):
         form.setHorizontalSpacing(18)
         form.setVerticalSpacing(9)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        if wrap_long_rows:
+            form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         layout.addLayout(form)
         for item in self.spec["fields"]:
             key, kind = item["key"], item["kind"]
@@ -218,6 +221,16 @@ class OptionPanel(QWidget):
         self._changed()
 
 
+class _WorkflowOptionsScroll(QScrollArea):
+    """Keep a long step inside the editor instead of enlarging the whole page."""
+
+    def sizeHint(self):
+        return QSize(340, 300)
+
+    def minimumSizeHint(self):
+        return QSize(0, 150)
+
+
 class WorkflowStep(QWidget):
     changed = Signal()
 
@@ -230,6 +243,15 @@ class WorkflowStep(QWidget):
             self.choice.addItem(title, value)
         self.choice.setCurrentIndex(max(0, self.choice.findData(mode)))
         self.body.addWidget(self.choice)
+        self.options_scroll = _WorkflowOptionsScroll()
+        self.options_scroll.setObjectName("workflowOptionsScroll")
+        self.options_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.options_scroll.setWidgetResizable(True)
+        self.options_scroll.viewport().setAutoFillBackground(False)
+        self.options_scroll.setMinimumWidth(0)
+        self.options_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.options_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.body.addWidget(self.options_scroll, 1)
         self.panel = None
         self.rebuild()
         self.choice.currentIndexChanged.connect(self.rebuild)
@@ -244,11 +266,12 @@ class WorkflowStep(QWidget):
 
     def rebuild(self, *_):
         if self.panel is not None:
-            self.body.removeWidget(self.panel)
-            self.panel.deleteLater()
-        self.panel = OptionPanel(self.choice.currentData())
+            self.options_scroll.takeWidget().deleteLater()
+        self.panel = OptionPanel(self.choice.currentData(), wrap_long_rows=True)
         self.panel.changed.connect(self.changed.emit)
-        self.body.addWidget(self.panel)
+        self.options_scroll.setWidget(self.panel)
+        self.panel.setAutoFillBackground(False)
+        self.options_scroll.verticalScrollBar().setValue(0)
         self._restrict()
         self.changed.emit()
 
@@ -270,9 +293,16 @@ class WorkflowPanel(QWidget):
         row.addWidget(add)
         row.addWidget(remove)
         row.addStretch()
+        self.scope_button = QPushButton("步骤范围")
+        self.scope_button.setObjectName("quiet")
+        self.scope_button.setToolTip("查看可组合步骤与独立工具的区别")
+        self.scope_button.clicked.connect(self.show_step_scope)
+        row.addWidget(self.scope_button)
         layout.addLayout(row)
         self.tabs = QTabWidget()
         self.tabs.setMovable(True)
+        self.tabs.setUsesScrollButtons(True)
+        self.tabs.tabBar().setExpanding(False)
         self.tabs.currentChanged.connect(lambda *_: self.changed.emit())
         layout.addWidget(self.tabs)
         self.archive = QCheckBox("完成后将最终文件压缩归档为ZIP")
@@ -283,6 +313,12 @@ class WorkflowPanel(QWidget):
         layout.addWidget(self.stop_on_error)
         layout.addWidget(text_label("按标签顺序运行，可拖动标签调整。匹配文件进入当前步骤，其余文件留给后续步骤；中间结果在本次文件夹内保留。流程中的归档操作只处理副本。", True))
         self.add_step("excel_merge")
+
+    def show_step_scope(self):
+        QMessageBox.information(self, "可组合步骤的范围",
+            "当前开放：" + "、".join(title for title, _ in WORKFLOW_CHOICES) + "。\n\n"
+            "组合步骤需要生成供下一步处理的文件。对账、核查、检索与查重等需要明确输入角色、阅读检查结果或交互确认，请从对应独立工具入口使用。\n\n"
+            "其他转换和整理工具尚未接入组合流程；未列出不代表不能单独使用。")
 
     def add_step(self, mode="excel_merge", options=None):
         step = WorkflowStep(mode, options)

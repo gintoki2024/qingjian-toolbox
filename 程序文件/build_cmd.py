@@ -100,9 +100,57 @@ def copy_runtime(project, target):
     # Resolve imports entirely within this folder even when a user's machine
     # has PYTHONPATH, user-site packages or a different Python installation.
     (target / 'python312._pth').write_text('.\nLib\nDLLs\nLib/site-packages\n', encoding='utf-8')
-    return {'version': sys.version, 'source_base': str(base), 'packages': records,
+    return {'version': sys.version, 'origin': 'local-compatible-python', 'packages': records,
             'python_sha256': digest(target / 'python.exe'), 'pythonw_sha256': digest(target / 'pythonw.exe'),
             'dll_sha256': digest(target / 'python312.dll')}
+
+
+def export_runtime_licenses(project, program):
+    """Record the libraries actually copied, rather than a prior release's set."""
+    licenses = program / 'licenses'
+    licenses.mkdir(exist_ok=True)
+    for source, relative in (
+        (project / '第三方组件说明.txt', Path('第三方组件说明.txt')),
+        (project / '排版引擎来源.json', Path('排版引擎来源.json')),
+        (Path(sys.base_prefix) / 'LICENSE.txt', Path('Python-LICENSE.txt')),
+        (project / 'lunar_python/LICENSE.txt', Path('lunar_python/LICENSE.txt')),
+        (project / 'lunar_python/来源.json', Path('lunar_python/来源.json')),
+    ):
+        if source.is_file():
+            target = licenses / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+    inventory = []
+    for name, dist in sorted(runtime_dependencies(project).items()):
+        inventory.append({'name': dist.metadata['Name'], 'version': dist.version,
+                          'home': dist.metadata.get('Home-page', ''),
+                          'project_urls': dist.metadata.get_all('Project-URL', [])})
+        source_site = Path(dist.locate_file('')).resolve()
+        for relative in dist.files or []:
+            relative = Path(str(relative))
+            if relative.is_absolute() or '..' in relative.parts:
+                continue
+            text = relative.as_posix().lower()
+            if not (('/licenses/' in text) or
+                    ('.dist-info/' in text and any(word in relative.name.lower()
+                     for word in ('license', 'licence', 'copying', 'copyright', 'notice'))) or
+                    (name == 'reportlab' and any(word in relative.name.lower()
+                     for word in ('license', 'copying', 'copyright')))):
+                continue
+            source = Path(dist.locate_file(relative)).resolve()
+            if not source.is_relative_to(source_site) or not source.is_file():
+                continue
+            target = licenses / name / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+    origin = project / 'lunar_python/来源.json'
+    if origin.is_file():
+        calendar = json.loads(origin.read_text(encoding='utf-8'))
+        inventory.append({'name': calendar['name'], 'version': calendar['version'],
+                          'home': calendar['upstream'], 'license': calendar['license'],
+                          'vendored_unmodified': True, 'source_sha256': calendar['sha256']})
+    (licenses / '组件版本.json').write_text(json.dumps(inventory, ensure_ascii=False, indent=2), encoding='utf-8')
+    return inventory
 
 
 def build(output, native_bundle, project=PROJECT):
@@ -129,6 +177,7 @@ def build(output, native_bundle, project=PROJECT):
     for name in ('engines', 'support', 'licenses'):
         shutil.copytree(native_bundle / name, program / name)
     runtime = copy_runtime(project, program / 'Python')
+    export_runtime_licenses(project, program)
     (program / 'cmd-package.json').write_text(json.dumps({'schema_version': 1, 'mode': 'offline', 'version': __version__}, ensure_ascii=False), encoding='utf-8')
     (program / 'Python/运行时来源.json').write_text(json.dumps(runtime, ensure_ascii=False, indent=2), encoding='utf-8')
     shutil.copy2(project / 'launcher/start_offline.cmd', bundle / '启动青简工具箱.cmd')

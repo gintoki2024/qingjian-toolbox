@@ -146,6 +146,10 @@ def run_workflow(sources, folder, options, progress=None, cancel=None):
     for index, step in enumerate(steps):
         mode, step_options = step["tool"], dict(step.get("options", {}))
         suffixes = TOOLS[mode]["extensions"]
+        if mode == "document_export" and step_options.get("action", "text") == "images":
+            # The export form also offers PDF/TXT for text export. They are not
+            # image sources and must stay available to later workflow steps.
+            suffixes = {".docx", ".doc"}
         eligible = [p for p in current if suffixes is None or p.suffix.lower() in suffixes]
         carried = [p for p in current if p not in eligible]
         destination = folder / f"{index + 1:02d}_{safe_name(TOOLS[mode]['title'])}"

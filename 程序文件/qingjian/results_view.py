@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView, QDialog, QFileDialog, QFrame, QHBoxLayout, QHeaderView,
     QLabel, QMenu, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from .catalog import TOOLS
+from .icons import bind_window_icon
 from .profile import task_counts, task_outputs, task_records, task_status
 
 SAFE_OPEN_SUFFIXES = frozenset({
@@ -138,14 +139,17 @@ def _date_text(value):
 class _ListPage(QWidget):
     def __init__(self, title, subtitle, parent=None):
         super().__init__(parent)
+        self._compact = False
         self.setObjectName("workspace")
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 26, 28, 22)
         outer.setSpacing(10)
         self.header = QHBoxLayout()
-        self.header.addWidget(_label(title, "pageTitle"), 1)
+        self.title_label = _label(title, "pageTitle")
+        self.header.addWidget(self.title_label, 1)
         outer.addLayout(self.header)
-        outer.addWidget(_label(subtitle))
+        self.subtitle_label = _label(subtitle)
+        outer.addWidget(self.subtitle_label)
         outer.addSpacing(10)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -158,6 +162,17 @@ class _ListPage(QWidget):
         self.rows.setSpacing(12)
         self.scroll.setWidget(self.body)
         outer.addWidget(self.scroll, 1)
+
+    def set_compact(self, compact):
+        compact = bool(compact)
+        if self._compact == compact:
+            return
+        self._compact = compact
+        self.layout().setContentsMargins(*((12, 10, 12, 10) if compact else (28, 26, 28, 22)))
+        self.layout().setSpacing(6 if compact else 10)
+        self.rows.setSpacing(9 if compact else 12)
+        self.title_label.setStyleSheet("font-size: 20px;" if compact else "")
+        self.updateGeometry()
 
     def _clear(self):
         while self.rows.count():
@@ -188,28 +203,32 @@ class PresetsPage(_ListPage):
         self.set_presets([])
 
     def set_presets(self, presets):
-        self._clear()
-        values = [item for item in presets if isinstance(item, dict)] if isinstance(presets, list) else []
-        if not values:
-            self._empty("还没有常用方案", "进入任意工具，调整好处理规则后，点击“保存方案”。")
-            return
-        for item in values:
-            preset_id = str(item.get("id", ""))
-            card = QFrame()
-            card.setObjectName("card")
-            card.setMinimumWidth(0)
-            layout = QVBoxLayout(card)
-            layout.setContentsMargins(20, 16, 20, 16)
-            layout.setSpacing(9)
-            layout.addWidget(_label(item.get("name", "未命名方案"), "cardTitle"))
-            layout.addWidget(_label(_mode_title(item.get("mode")) + "  ·  " + _date_text(item.get("created", ""))))
-            actions = QHBoxLayout()
-            actions.addWidget(_button("使用方案", lambda checked=False, key=preset_id: self.preset_requested.emit(key), "sourceAdd"))
-            actions.addStretch(1)
-            actions.addWidget(_button("删除方案", lambda checked=False, key=preset_id: self.delete_requested.emit(key), "quiet"))
-            layout.addLayout(actions)
-            self.rows.addWidget(card)
-        self.rows.addStretch()
+        self.body.setUpdatesEnabled(False)
+        try:
+            self._clear()
+            values = [item for item in presets if isinstance(item, dict)] if isinstance(presets, list) else []
+            if not values:
+                self._empty("还没有常用方案", "进入任意工具，调整好处理规则后，点击“保存方案”。")
+                return
+            for item in values:
+                preset_id = str(item.get("id", ""))
+                card = QFrame()
+                card.setObjectName("card")
+                card.setMinimumWidth(0)
+                layout = QVBoxLayout(card)
+                layout.setContentsMargins(18, 14, 18, 14)
+                layout.setSpacing(8)
+                layout.addWidget(_label(item.get("name", "未命名方案"), "cardTitle"))
+                layout.addWidget(_label(_mode_title(item.get("mode")) + "  ·  " + _date_text(item.get("created", ""))))
+                actions = QHBoxLayout()
+                actions.addWidget(_button("使用方案", lambda checked=False, key=preset_id: self.preset_requested.emit(key), "sourceAdd"))
+                actions.addStretch(1)
+                actions.addWidget(_button("删除方案", lambda checked=False, key=preset_id: self.delete_requested.emit(key), "quiet"))
+                layout.addLayout(actions)
+                self.rows.addWidget(card)
+            self.rows.addStretch()
+        finally:
+            self.body.setUpdatesEnabled(True)
 
 
 class HistoryPage(_ListPage):
@@ -224,39 +243,43 @@ class HistoryPage(_ListPage):
         self.set_history([])
 
     def set_history(self, history):
-        self._clear()
-        values = [item for item in history if isinstance(item, dict)] if isinstance(history, list) else []
-        self.clear_button.setEnabled(bool(values))
-        if not values:
-            self._empty("开始第一项办公任务", "处理完成后，这里会保留时间、结果位置和异常数量，方便继续核查。")
-            return
-        for item in values:
-            job_id = str(item.get("id", ""))
-            card = QFrame()
-            card.setObjectName("card")
-            card.setMinimumWidth(0)
-            layout = QVBoxLayout(card)
-            layout.setContentsMargins(20, 16, 20, 16)
-            layout.setSpacing(9)
-            layout.addWidget(_label(item.get("title", "办公任务"), "cardTitle"))
-            summary = f"{item.get('status', '完成')}  ·  产物 {item.get('output_count', 0)} 个  ·  异常 {item.get('error_count', 0)} 项"
-            layout.addWidget(_label(summary + "  ·  " + _date_text(item.get("created", ""))))
-            if item.get("folder"):
-                path_label = _label(item["folder"])
-                path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-                layout.addWidget(path_label)
-            actions = QHBoxLayout()
-            actions.addWidget(_button("查看结果", lambda checked=False, key=job_id: self.result_requested.emit(key), "sourceAdd"))
-            folder_button = _button("打开输出目录", lambda checked=False, key=job_id: self.open_folder_requested.emit(key), "quiet")
-            exists = _folder_path(item.get("folder", "")) is not None
-            folder_button.setEnabled(exists)
-            if not exists:
-                folder_button.setToolTip("原结果目录已移动或不存在。")
-            actions.addWidget(folder_button)
-            actions.addStretch(1)
-            layout.addLayout(actions)
-            self.rows.addWidget(card)
-        self.rows.addStretch()
+        self.body.setUpdatesEnabled(False)
+        try:
+            self._clear()
+            values = [item for item in history if isinstance(item, dict)] if isinstance(history, list) else []
+            self.clear_button.setEnabled(bool(values))
+            if not values:
+                self._empty("开始第一项办公任务", "处理完成后，这里会保留时间、结果位置和异常数量，方便继续核查。")
+                return
+            for item in values:
+                job_id = str(item.get("id", ""))
+                card = QFrame()
+                card.setObjectName("card")
+                card.setMinimumWidth(0)
+                layout = QVBoxLayout(card)
+                layout.setContentsMargins(18, 14, 18, 14)
+                layout.setSpacing(8)
+                layout.addWidget(_label(item.get("title", "办公任务"), "cardTitle"))
+                summary = f"{item.get('status', '完成')}  ·  产物 {item.get('output_count', 0)} 个  ·  异常 {item.get('error_count', 0)} 项"
+                layout.addWidget(_label(summary + "  ·  " + _date_text(item.get("created", ""))))
+                if item.get("folder"):
+                    path_label = _label(item["folder"])
+                    path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+                    layout.addWidget(path_label)
+                actions = QHBoxLayout()
+                actions.addWidget(_button("查看结果", lambda checked=False, key=job_id: self.result_requested.emit(key), "sourceAdd"))
+                folder_button = _button("打开输出目录", lambda checked=False, key=job_id: self.open_folder_requested.emit(key), "quiet")
+                exists = _folder_path(item.get("folder", "")) is not None
+                folder_button.setEnabled(exists)
+                if not exists:
+                    folder_button.setToolTip("原结果目录已移动或不存在。")
+                actions.addWidget(folder_button)
+                actions.addStretch(1)
+                layout.addLayout(actions)
+                self.rows.addWidget(card)
+            self.rows.addStretch()
+        finally:
+            self.body.setUpdatesEnabled(True)
 
 
 def _warnings(record):
@@ -288,6 +311,7 @@ class ResultDialog(QDialog):
         self.result_data = result if isinstance(result, dict) else {}
         self.records = task_records(self.result_data)
         self.setWindowTitle(title)
+        bind_window_icon(self, "toolbox")
         self.resize(940, 650)
         self.setMinimumSize(600, 560)
         outer = QVBoxLayout(self)
@@ -328,6 +352,14 @@ class ResultDialog(QDialog):
             for column, value in enumerate(values):
                 cell = QTableWidgetItem(str(value))
                 cell.setToolTip(input_value if column == 0 else output if column == 1 else str(value))
+                if column == 2:
+                    state_str = str(value)
+                    if "成功" in state_str or "完成" in state_str:
+                        cell.setForeground(QColor("#2f7a62"))
+                    elif "失败" in state_str or "异常" in state_str:
+                        cell.setForeground(QColor("#b54e4e"))
+                    elif "停止" in state_str:
+                        cell.setForeground(QColor("#8c6d46"))
                 self.table.setItem(row, column, cell)
         self.table.itemSelectionChanged.connect(self._selection_changed)
         outer.addWidget(self.table, 3)

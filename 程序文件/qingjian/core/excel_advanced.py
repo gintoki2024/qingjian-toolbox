@@ -800,6 +800,7 @@ def _print(files, folder, options, progress, cancel):
                 pdf = unique_path(folder, path.stem + "_打印.pdf")
                 _export_pdf(target, pdf, options, cancel)
                 outputs.append(pdf)
+                data_outputs.append(pdf)
         except CancelledError:
             raise
         except Exception as exc:

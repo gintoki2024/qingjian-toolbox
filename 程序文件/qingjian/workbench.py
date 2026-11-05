@@ -82,42 +82,68 @@ for _group in TOOL_GROUPS:
 
 WORKBENCH_STYLE = """
 QWidget#wbPage, QWidget#wbCanvas, QScrollArea#wbScroll { background: transparent; border: none; }
-QLabel#wbEyebrow { color: #6257ed; font-size: 12px; font-weight: 600; }
-QLabel#wbTitle { color: #252d43; font-size: 29px; font-weight: 700; }
-QLabel#wbSubtitle { color: #7e879a; font-size: 13px; }
-QLabel#wbSection { color: #364057; font-size: 16px; font-weight: 600; }
-QLabel#wbSmall { color: #8891a2; font-size: 11px; }
-QFrame#wbQuickBar { background: #ffffff; border: 1px solid #e7e9f0; border-radius: 16px; }
+QLabel#wbEyebrow { color: #5c50e6; font-size: 12px; font-weight: 600; }
+QLabel#wbTitle { color: #1f273d; font-size: 29px; font-weight: 700; }
+QLabel#wbSubtitle { color: #768095; font-size: 13px; }
+QLabel#wbSection { color: #2d374e; font-size: 16px; font-weight: 600; }
+QLabel#wbSmall { color: #828c9f; font-size: 11px; }
+QFrame#wbQuickBar { background: #ffffff; border: 1px solid #e2e6f0; border-radius: 16px; }
 QFrame#wbQuickBar[dragActive="true"] { background: #efedff; border-color: #8b80ed; }
-QAbstractButton#wbTaskCard { background: #ffffff; border: 1px solid #e7e9f0; border-radius: 18px; }
-QAbstractButton#wbTaskCard:hover { background: #fcfbff; border-color: #d4cff6; }
-QAbstractButton#wbTaskCard:focus { border: 2px solid #aaa2f0; }
-QAbstractButton#wbTaskCard:pressed { background: #f4f1ff; }
+QAbstractButton#wbTaskCard {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #fcfdff);
+    border: 1px solid #e1e5ef; border-radius: 18px;
+}
+QAbstractButton#wbTaskCard:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #f7f5ff);
+    border-color: #c7bff4;
+}
+QAbstractButton#wbTaskCard:focus { border: 2px solid #a39af0; }
+QAbstractButton#wbTaskCard:pressed { background: #f1eeff; border-color: #b5acf0; }
 QAbstractButton#wbTaskCard[compact="true"] { border-radius: 14px; }
-QLabel#wbCardTitle { color: #333d54; font-size: 15px; font-weight: 600; }
-QLabel#wbCardText { color: #7a8499; font-size: 12px; }
-QLabel#wbTag { color: #939bad; font-size: 10px; }
-QLabel#wbArrow { color: #b4bac8; font-size: 18px; }
-QPushButton#wbAdd { background: #6a5fe8; color: #ffffff; border: 1px solid #6a5fe8; border-radius: 12px; padding: 8px 16px; }
+QLabel#wbCardTitle { color: #2c364e; font-size: 15px; font-weight: 600; }
+QLabel#wbCardText { color: #747f95; font-size: 12px; }
+QLabel#wbTag {
+    color: #7d869c; background: #f3f4fa; border-radius: 7px;
+    padding: 2px 7px; font-size: 10px; font-weight: 600;
+}
+QLabel#wbArrow { color: #a7b0c2; font-size: 18px; }
+QPushButton#wbAdd { background: #6358e6; color: #ffffff; border: 1px solid #6358e6; border-radius: 12px; padding: 8px 16px; }
 QPushButton#wbAdd:hover { background: #5246d8; }
-QPushButton#wbLink { border: none; background: transparent; color: #6257ed; font-size: 12px; padding: 4px 0px; }
-QPushButton#wbLink:hover { color: #463acb; }
-QPushButton#wbFilter { background: #ffffff; border: 1px solid #e8eaf1; color: #7c869b; padding: 6px 12px; border-radius: 14px; }
-QPushButton#wbFilter:checked { background: #efedff; color: #6257ed; border-color: #dcd5ff; }
-QFrame#wbSummary { background: #ffffff; border: 1px solid #e7e9f0; border-radius: 16px; }
-QPushButton#wbRow { text-align: left; background: #fafbfe; color: #59647e; border: 1px solid #eceef4; padding: 9px 12px; border-radius: 11px; }
-QPushButton#wbRow:hover { background: #efedff; color: #6257ed; }
-QLabel#wbEmpty { color: #919aab; font-size: 12px; padding: 10px 0px; }
-QLineEdit#wbSearch { padding: 11px 16px; border: 1px solid #e6e9f0; border-radius: 20px; background: white; }
-QFrame#wbFacts { border: 1px solid #e6e9f1; background: #f6f7fa; border-radius: 12px; }
-QLabel#wbFact { color: #7e889c; font-size: 11px; padding: 3px 0px; }
-QPushButton#wbGroupCard { background: #ffffff; border: 1px solid #dce0e9; border-radius: 18px; text-align: left; }
-QPushButton#wbGroupCard:hover { background: #faf9ff; border-color: #d2ccf3; }
-QPushButton#wbGroupCard:focus { border: 2px solid #b0a6e6; }
-QPushButton#wbGroupCard:pressed { background: #f2f0fb; }
-QLabel#wbGroupTitle { color: #354158; font-size: 14px; font-weight: 600; }
-QLabel#wbGroupText { color: #7d8798; font-size: 11px; }
-QLabel#wbNoResults { color: #8490a4; padding: 30px 10px; font-size: 13px; }
+QPushButton#wbLink { border: none; background: transparent; color: #5c50e6; font-size: 12px; font-weight: 600; padding: 4px 0px; }
+QPushButton#wbLink:hover { color: #4337c9; }
+QPushButton#wbFilter {
+    background: #ffffff; border: 1px solid #e2e6f0; color: #727c92;
+    padding: 6px 12px; border-radius: 14px;
+}
+QPushButton#wbFilter:hover { background: #f7f6ff; border-color: #d0caf6; color: #564add; }
+QPushButton#wbFilter:checked {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ece9ff, stop:1 #f3f1ff);
+    color: #584ce4; border-color: #cfc7fc; font-weight: 600;
+}
+QFrame#wbSummary { background: #ffffff; border: 1px solid #e2e6f0; border-radius: 16px; }
+QPushButton#wbRow { text-align: left; background: #fafbfe; color: #55607a; border: 1px solid #eaecf4; padding: 9px 12px; border-radius: 11px; }
+QPushButton#wbRow:hover { background: #efedff; color: #5c50e6; border-color: #dcd6fa; }
+QLabel#wbEmpty { color: #8c96a8; font-size: 12px; padding: 10px 0px; }
+QLineEdit#wbSearch {
+    padding: 11px 16px; border: 1px solid #dfe4ee; border-radius: 20px; background: #ffffff;
+}
+QLineEdit#wbSearch:hover { border-color: #c8d0e0; }
+QLineEdit#wbSearch:focus { border-color: #938be8; background: #ffffff; }
+QFrame#wbFacts { border: 1px solid #e4e8f1; background: #f6f7fb; border-radius: 12px; }
+QLabel#wbFact { color: #788297; font-size: 11px; padding: 3px 0px; }
+QPushButton#wbGroupCard {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #fcfdff);
+    border: 1px solid #dae0eb; border-radius: 18px; text-align: left;
+}
+QPushButton#wbGroupCard:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #f7f6ff);
+    border-color: #c6bef0;
+}
+QPushButton#wbGroupCard:focus { border: 2px solid #a89ee6; }
+QPushButton#wbGroupCard:pressed { background: #f0edfb; }
+QLabel#wbGroupTitle { color: #2e3952; font-size: 14px; font-weight: 600; }
+QLabel#wbGroupText { color: #778195; font-size: 11px; }
+QLabel#wbNoResults { color: #808ca0; padding: 30px 10px; font-size: 13px; }
 """
 
 
@@ -251,26 +277,38 @@ class _AdaptiveGrid(QWidget):
         self.stretch_last = stretch_last
 
     def set_items(self, items):
-        for item in self.items:
-            self.grid.removeWidget(item)
-            item.hide()
-        self.items = list(items)
-        self.columns = 0
-        self._reflow()
+        new_items = list(items)
+        if new_items == self.items and self.columns > 0:
+            return
+        self.setUpdatesEnabled(False)
+        try:
+            for item in self.items:
+                self.grid.removeWidget(item)
+                if item not in new_items:
+                    item.hide()
+            self.items = new_items
+            self.columns = 0
+            self._reflow()
+        finally:
+            self.setUpdatesEnabled(True)
 
     def _reflow(self):
         columns = min(self.maximum_columns, 1 + sum(self.width() >= point for point in self.breakpoints))
         if columns == self.columns:
             return
         self.columns = columns
-        for column in range(6):
-            self.grid.setColumnStretch(column, int(column < columns))
-        for index, item in enumerate(self.items):
-            self.grid.removeWidget(item)
-            span = columns - index % columns if self.stretch_last and index == len(self.items) - 1 else 1
-            self.grid.addWidget(item, index // columns, index % columns, 1, span)
-            item.show()
-        self.updateGeometry()
+        self.setUpdatesEnabled(False)
+        try:
+            for column in range(6):
+                self.grid.setColumnStretch(column, int(column < columns))
+            for index, item in enumerate(self.items):
+                self.grid.removeWidget(item)
+                span = columns - index % columns if self.stretch_last and index == len(self.items) - 1 else 1
+                self.grid.addWidget(item, index // columns, index % columns, 1, span)
+                item.show()
+            self.updateGeometry()
+        finally:
+            self.setUpdatesEnabled(True)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -312,6 +350,9 @@ class _DropBar(QFrame):
         return [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile() and url.toLocalFile()]
 
     def _active(self, value):
+        value = bool(value)
+        if bool(self.property("dragActive")) == value:
+            return
         self.setProperty("dragActive", value)
         self.style().unpolish(self)
         self.style().polish(self)
@@ -388,9 +429,14 @@ class GroupCard(QPushButton):
         self.body.addWidget(arrow)
         for child in self.findChildren(QLabel):
             child.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._compact = None
         self.set_compact(False)
 
     def set_compact(self, compact):
+        compact = bool(compact)
+        if self._compact == compact:
+            return
+        self._compact = compact
         self.setFixedHeight(54 if compact else 82)
         self.body.setContentsMargins(9 if compact else 12, 7 if compact else 13, 9 if compact else 12, 7 if compact else 13)
         self.body.setSpacing(8 if compact else 12)
