@@ -5,7 +5,7 @@
 <!-- DOWNLOAD_LINK -->
 [下载 v0.11.2](https://github.com/gintoki2024/qingjian-toolbox/releases/tag/v0.11.2) · [全部版本](https://github.com/gintoki2024/qingjian-toolbox/releases)
 
-**仓库保持私有。** 下载者需要登录已获本仓库访问权限的 GitHub 账号；仅转发链接不能授予访问权限。打开 **Releases → v0.11.2 → Assets**，选择下列一种 ZIP。GitHub 自动生成的 `Source code` 压缩包是开发仓库快照，普通使用请选择专门打包的附件。
+打开 **Releases → v0.11.2 → Assets**，选择下列一种 ZIP。GitHub 自动生成的 `Source code` 压缩包是开发仓库快照，普通使用请选择专门打包的附件。
 
 | 下载包 | 适合谁 | 首次运行 |
 | --- | --- | --- |
