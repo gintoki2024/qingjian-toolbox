@@ -27,7 +27,7 @@ jobs:
     name: macOS ${{ matrix.target.arch }}
     strategy:
       fail-fast: true
-      max-parallel: 1
+      max-parallel: 2
       matrix:
         target: ${{ fromJSON(inputs.architecture == 'both' && '[{"arch":"arm64","runner":"macos-15"},{"arch":"x86_64","runner":"macos-15-intel"}]' || inputs.architecture == 'x86_64' && '[{"arch":"x86_64","runner":"macos-15-intel"}]' || '[{"arch":"arm64","runner":"macos-15"}]') }}
     runs-on: ${{ matrix.target.runner }}
