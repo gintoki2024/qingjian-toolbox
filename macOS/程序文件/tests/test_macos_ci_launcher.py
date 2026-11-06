@@ -15,6 +15,17 @@ def coordinator():
     return module
 
 
+def test_focused_regression_creates_parent_for_pytest_basetemp(tmp_path):
+    module = coordinator()
+    def run(arguments, **kwargs):
+        if '--basetemp' in arguments:
+            target = Path(arguments[arguments.index('--basetemp') + 1])
+            assert target.parent.is_dir()
+        return Mock(returncode=0)
+    with patch.object(module.subprocess, 'run', side_effect=run):
+        module.focused_regression(tmp_path / 'python', tmp_path / 'home', tmp_path / 'output')
+
+
 @pytest.mark.parametrize('failure', ['', 'exit', 'missing', 'other-group'])
 def test_source_launch_cleanup_requires_ready_and_own_session(tmp_path, failure):
     module = coordinator()

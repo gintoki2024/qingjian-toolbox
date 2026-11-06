@@ -72,6 +72,7 @@ def focused_regression(python: Path, home: Path, output: Path) -> None:
         raise RuntimeError("Mac 验收依赖安装未完成：" + "；".join(failures))
     destination = output / "acceptance" / platform.machine()
     destination.mkdir(parents=True, exist_ok=True)
+    (output / "tests-temp").mkdir(parents=True, exist_ok=True)
     for name in ("test_macos_bootstrap", "test_macos_native", "test_macos_core", "test_macos_packaging",
                  "test_macos_dependency_isolation", "test_macos_ci_launcher"):
         environment = os.environ.copy()
@@ -115,7 +116,6 @@ def main(home: Path, output: Path) -> dict:
              "ensure_redistribution_materials(sys.argv[1], sys.argv[2], emit=print)", str(PROJECT), str(home)])
     execute([str(python), str(PROJECT / "build_macos.py"), "--output", str(output / "build"),
              "--runtime", str(python.parents[1]), "--native-home", str(home), "--architecture", arch])
-    focused_regression(python, home, output)
     sys.path.insert(0, str(PROJECT))
     from package_macos import package_full, version_of
     version = version_of(PROJECT)
@@ -124,6 +124,9 @@ def main(home: Path, output: Path) -> dict:
     verification = output / "acceptance" / arch
     execute([str(packaged_python), "-I", "-B", str(bundle / "程序文件/macos_build/verify_macos.py"),
              "--bundle", str(bundle), "--output", str(verification)])
+    # Keep real application acceptance independent of test-tool setup. Both
+    # must pass before any distributable complete ZIP is produced.
+    focused_regression(python, home, output)
     # Validation must precede publication of a complete archive.
     release = output / "release"
     release.mkdir(exist_ok=True)
