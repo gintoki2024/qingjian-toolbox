@@ -13,7 +13,7 @@
 | [苹果芯片完整包](https://github.com/gintoki2024/qingjian-toolbox/releases/download/v0.12.0-macOS/QingjianToolbox-v0.12.0-macOS-arm64-Full.zip) | M 系列 Mac，arm64 |
 | [Intel 完整包](https://github.com/gintoki2024/qingjian-toolbox/releases/download/v0.12.0-macOS/QingjianToolbox-v0.12.0-macOS-x86_64-Full.zip) | Intel Mac，x86_64 |
 
-完整解压后双击 `启动青简工具箱.command`。根目录仅有启动器、使用说明、程序文件三项；源码升级保留包外共享环境。两种架构均完成真实 Mac 启动、27 页界面、57 项业务、9 项原生转换及 187 项针对性回归，附 SHA256 和来源记录。
+请在 Mac 上完整解压 ZIP 后双击 `启动青简工具箱.command`。根目录仅有启动器、使用说明、程序文件三项；源码升级保留包外共享环境。两种架构均完成真实 Mac 启动、27 页界面、57 项业务、9 项原生转换及 187 项针对性回归，附 SHA256 和来源记录。
 
 本版未提供 Apple Developer ID 签名或公证，首次打开按随包说明通过系统“隐私与安全性”的正常入口处理。Finder 拖住文件时的滚轮翻页、通知/休眠唤醒及多屏吸附仍需实际桌面操作确认；Mac 字体差异可能影响公文分页。
 
