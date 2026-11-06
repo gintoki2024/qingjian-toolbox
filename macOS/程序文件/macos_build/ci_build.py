@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import signal
 import subprocess
 import sys
 
@@ -19,6 +20,40 @@ PROJECT = Path(__file__).resolve().parents[1]
 def execute(arguments: list[str], *, cwd: Path = PROJECT, env=None) -> None:
     print("执行：" + " ".join(arguments), flush=True)
     subprocess.run(arguments, cwd=cwd, check=True, env=env)
+
+
+def source_launcher_acceptance(home: Path, output: Path, environment: dict) -> None:
+    """Exercise the real source launcher offline and confirm its GUI detaches."""
+    destination = output / "acceptance" / platform.machine() / "source-ui"
+    destination.mkdir(parents=True, exist_ok=True)
+    environment = {**environment, "QINGJIAN_USER_DATA": str(destination / "fictional-user")}
+    command = ["/bin/bash", str(PROJECT / "launcher/start_macos.command"),
+               "--home", str(home), "--managed-python", "--offline"]
+    done = subprocess.run(command, cwd=PROJECT, env=environment, capture_output=True,
+                          text=True, encoding="utf-8", errors="replace", timeout=120)
+    (destination / "source-launcher.stdout.txt").write_text(done.stdout, encoding="utf-8")
+    (destination / "source-launcher.stderr.txt").write_text(done.stderr, encoding="utf-8")
+    if done.returncode:
+        raise RuntimeError("源码启动器离线启动失败：" + done.stdout[-2000:] + done.stderr[-2000:])
+    events = []
+    for line in done.stdout.splitlines():
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(item, dict) and item.get("event") == "launched":
+            events.append(item)
+    if len(events) != 1 or type(events[0].get("pid")) is not int:
+        raise RuntimeError("源码启动器未返回唯一的界面就绪记录。")
+    pid = events[0]["pid"]
+    if pid <= 1 or os.getpgid(pid) != pid:
+        raise RuntimeError("源码界面未与准备终端分离。")
+    # Stop only the GUI created and confirmed by this acceptance invocation.
+    os.killpg(pid, signal.SIGTERM)
+    (destination / "源码启动器.json").write_text(json.dumps({
+        "passed": True, "platform": sys.platform, "architecture": platform.machine(),
+        "offline": True, "system_only_path": True, "detached_gui": True,
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def focused_regression(python: Path, home: Path, output: Path) -> None:
@@ -38,7 +73,7 @@ def focused_regression(python: Path, home: Path, output: Path) -> None:
     destination = output / "acceptance" / platform.machine()
     destination.mkdir(parents=True, exist_ok=True)
     for name in ("test_macos_bootstrap", "test_macos_native", "test_macos_core", "test_macos_packaging",
-                 "test_macos_dependency_isolation"):
+                 "test_macos_dependency_isolation", "test_macos_ci_launcher"):
         environment = os.environ.copy()
         environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
         subprocess.run([str(python), "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/" + name + ".py",
@@ -70,6 +105,12 @@ def main(home: Path, output: Path) -> dict:
              "--python", str(python), "--offline", "--no-ui"])
     # Imports alone cannot detect incompatible transitive package metadata.
     execute([str(python), "-I", "-m", "pip", "--isolated", "check"])
+    source_launcher_acceptance(home, output, first_environment)
+    source_ui = output / "acceptance" / arch / "source-ui"
+    source_ui.mkdir(parents=True, exist_ok=True)
+    execute([str(python), "-I", "-B", str(PROJECT / "macos_build/verify_macos.py"),
+             "--case", "ui", "--project", str(PROJECT), "--source-home", str(home),
+             "--report", str(source_ui / "源码原生界面.json")])
     execute([str(python), "-c", "import sys; from startup_macos_native import ensure_redistribution_materials; "
              "ensure_redistribution_materials(sys.argv[1], sys.argv[2], emit=print)", str(PROJECT), str(home)])
     execute([str(python), str(PROJECT / "build_macos.py"), "--output", str(output / "build"),

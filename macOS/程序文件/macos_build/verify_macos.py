@@ -99,13 +99,33 @@ def probe(project: Path, report: Path) -> None:
                                   "dependencies": dependencies}, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def native_ui(project: Path, report: Path, *, api_preflight: bool = False) -> None:
+def _source_ui_native(project: Path, source_home: Path) -> dict:
+    """Read verified source-component receipts without preparing/downloading."""
+    source_home = Path(source_home)
+    if not source_home.is_absolute():
+        raise ValueError("源码界面验收的 --source-home 必须为绝对路径。")
+    sys.path.insert(0, str(project))
+    from startup_macos_native import check_native
+    native = check_native(project, source_home, architecture=platform.machine())
+    if not native.get("ready"):
+        raise RuntimeError("源码界面验收所需原生组件未就绪：" + str(native.get("missing")))
+    os.environ.update(native["env"])
+    return native
+
+
+def native_ui(project: Path, report: Path, *, api_preflight: bool = False,
+              source_home: Path | None = None) -> None:
+    if api_preflight and source_home is not None:
+        raise ValueError("source_home 与 api_preflight 不能同时使用。")
     deny_network()
     if api_preflight:
         # A Windows API rehearsal can reveal stale method/attribute names;
         # its report explicitly cannot satisfy Mac release acceptance.
         sys.path.insert(0, str(project))
         os.environ["QT_QPA_PLATFORM"] = "offscreen"
+    elif source_home is not None:
+        _source_ui_native(project, source_home)
+        os.environ.pop("QT_QPA_PLATFORM", None)
     else:
         set_native(project)
         os.environ.pop("QT_QPA_PLATFORM", None)
@@ -120,7 +140,14 @@ def native_ui(project: Path, report: Path, *, api_preflight: bool = False) -> No
     from qingjian.theme import STYLE
     result = {"passed": False, "platform": sys.platform, "architecture": platform.machine(),
               "native_qt_platform": "", "pages": [], "python_errors": [], "network_calls_denied": True,
-              "api_preflight": api_preflight, "macos_runtime_verified": not api_preflight}
+              "api_preflight": api_preflight,
+              "macos_runtime_verified": not api_preflight and source_home is None,
+              "source_runtime_verified": not api_preflight and source_home is not None,
+              "verification_scope": "api-preflight" if api_preflight else "source-ui" if source_home is not None else "full-ui"}
+    screenshots = report.parent / "source-ui-screenshots" if source_home is not None else report.parent
+    screenshots.mkdir(parents=True, exist_ok=True)
+    data_folder = report.parent / ("source-fictional-user" if source_home is not None else "fictional-user")
+    result["screenshot_subdirectory"] = screenshots.relative_to(report.parent).as_posix()
     app = QApplication([])
     result["native_qt_platform"] = app.platformName()
     if not api_preflight:
@@ -129,8 +156,8 @@ def native_ui(project: Path, report: Path, *, api_preflight: bool = False) -> No
     app.setStyleSheet(STYLE)
     app.setFont(QFont(ui_font_family(), 12))
     app.setQuitOnLastWindowClosed(False)
-    window = Window(start_home=True, data_path=report.parent / "fictional-user/profile.json")
-    notebook = NotebookController(NotebookStore(report.parent / "fictional-user/notebook.json"),
+    window = Window(start_home=True, data_path=data_folder / "profile.json")
+    notebook = NotebookController(NotebookStore(data_folder / "notebook.json"),
                                   parent=app, enable_tray=False, test_mode=True)
     notebook.window_created.connect(window.register_notebook_windows)
     old_hook = sys.excepthook
@@ -140,7 +167,7 @@ def native_ui(project: Path, report: Path, *, api_preflight: bool = False) -> No
         try:
             window.show()
             app.processEvents()
-            window.grab().save(str(report.parent / "Mac-首页.png"))
+            window.grab().save(str(screenshots / "Mac-首页.png"))
             for mode in MODES:
                 window.switch_mode(MODES.index(mode))
                 app.processEvents()
@@ -152,7 +179,7 @@ def native_ui(project: Path, report: Path, *, api_preflight: bool = False) -> No
             window.show_converter()
             app.processEvents()
             assert window.converter_is_visible()
-            window.converter_window.grab().save(str(report.parent / "Mac-转换浮窗.png"))
+            window.converter_window.grab().save(str(screenshots / "Mac-转换浮窗.png"))
             notebook.show_window()
             app.processEvents()
             notebook.window.set_layout_mode("split")
@@ -162,7 +189,7 @@ def native_ui(project: Path, report: Path, *, api_preflight: bool = False) -> No
             for index, peer in enumerate(peers):
                 peer.show()
                 app.processEvents()
-                peer.grab().save(str(report.parent / f"Mac-记事浮窗{index + 1}.png"))
+                peer.grab().save(str(screenshots / f"Mac-记事浮窗{index + 1}.png"))
             # The appointment control must preserve hours and minutes.
             dialog = TaskEditorDialog(notebook.store, parent=notebook.window)
             dialog.remind_time_edit.setTime(QTime(13, 27))
@@ -273,7 +300,13 @@ if __name__ == "__main__":
     parser.add_argument("--case", choices=("probe", "ui", "business", "native"))
     parser.add_argument("--project", type=Path)
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--source-home", type=Path,
+                        help="仅用于 --case ui：已准备源码原生组件的绝对路径，不进行下载")
     args = parser.parse_args()
+    if args.source_home is not None and args.case != "ui":
+        parser.error("--source-home 仅可与 --case ui 一起使用")
+    if args.source_home is not None and not args.source_home.is_absolute():
+        parser.error("--source-home 必须是绝对路径")
     if sys.platform != "darwin":
         parser.error("必须在真实 macOS 执行。")
     if args.case:
@@ -283,7 +316,7 @@ if __name__ == "__main__":
         if args.case == "probe":
             probe(args.project.resolve(), args.report)
         elif args.case == "ui":
-            native_ui(args.project.resolve(), args.report)
+            native_ui(args.project.resolve(), args.report, source_home=args.source_home)
         elif args.case == "native":
             set_native(args.project.resolve())
             from macos_build.verify_native_macos import run as native_check

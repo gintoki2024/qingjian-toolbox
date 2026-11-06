@@ -14,6 +14,7 @@ import platform
 import re
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 
@@ -23,6 +24,7 @@ PROJECT = Path(__file__).resolve().parent
 MACHO_MAGICS = {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca", b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca"}
 DYLIB_LOAD_COMMANDS = {"LC_LOAD_DYLIB", "LC_LOAD_WEAK_DYLIB", "LC_REEXPORT_DYLIB",
                        "LC_LAZY_LOAD_DYLIB", "LC_LOAD_UPWARD_DYLIB"}
+JAVA_CLASS_LIMIT = 16 * 1024 * 1024
 
 
 def architecture(value: str | None = None) -> str:
@@ -96,6 +98,118 @@ def loaded_dylibs(load_commands: str) -> list[str]:
     return result
 
 
+def java_class_header(data: bytes) -> bool:
+    if len(data) < 10 or data[:4] != b"\xca\xfe\xba\xbe":
+        return False
+    minor, major, constants = struct.unpack_from(">HHH", data, 4)
+    return major >= 45 and (major < 56 or minor in {0, 65535}) and constants >= 2
+
+
+def is_java_class(data: bytes) -> bool:
+    """Recognize a bounded class-file structure, not a .class filename.
+
+    Java and universal Mach-O share CAFEBABE. Validate the constant pool and
+    every outer class/member/attribute boundary through EOF before skipping a
+    Java resource. This is a file-type check, not a Java bytecode verifier.
+    """
+    if len(data) > JAVA_CLASS_LIMIT or not java_class_header(data):
+        return False
+    _, major, count = struct.unpack_from(">HHH", data, 4)
+    position = 10
+    pool = [None] * count
+
+    def take(length):
+        nonlocal position
+        if length < 0 or position + length > len(data):
+            raise ValueError("Truncated class file")
+        result = data[position:position + length]
+        position += length
+        return result
+
+    def number(size):
+        return int.from_bytes(take(size), "big")
+
+    def reference(index, tags):
+        if not 0 < index < count or pool[index] is None or pool[index][0] not in tags:
+            raise ValueError("Invalid class constant reference")
+
+    def attributes():
+        for _ in range(number(2)):
+            reference(number(2), {1})
+            take(number(4))
+
+    def members():
+        for _ in range(number(2)):
+            number(2)  # access flags
+            reference(number(2), {1})
+            reference(number(2), {1})
+            attributes()
+
+    try:
+        index = 1
+        while index < count:
+            tag = number(1)
+            if tag == 1:
+                value = take(number(2))
+                # JVM CONSTANT_Utf8 uses modified UTF-8: NUL is C0 80 and
+                # supplementary characters use surrogate pairs, not 4 bytes.
+                if b"\x00" in value or any(byte >= 0xf0 for byte in value):
+                    return False
+                value.replace(b"\xc0\x80", b"\x00").decode("utf-8", "surrogatepass")
+            elif tag in {3, 4, 5, 6}:
+                value = take(8 if tag in {5, 6} else 4)
+            elif tag in {7, 8, 16, 19, 20}:
+                value = (number(2),)
+            elif tag in {9, 10, 11, 12, 17, 18}:
+                value = (number(2), number(2))
+            elif tag == 15:
+                value = (number(1), number(2))
+            else:
+                return False
+            if ((tag in {15, 16, 18} and major < 51) or (tag == 17 and major < 55)
+                    or (tag in {19, 20} and major < 53)):
+                return False
+            pool[index] = (tag, value)
+            index += 2 if tag in {5, 6} else 1
+            if index > count:
+                return False
+        for entry in pool[1:]:
+            if entry is None:
+                continue  # reserved second slot of a long/double
+            tag, value = entry
+            if tag in {7, 8, 16, 19, 20}:
+                reference(value[0], {1})
+            elif tag in {9, 10, 11}:
+                reference(value[0], {7})
+                reference(value[1], {12})
+            elif tag == 12:
+                reference(value[0], {1})
+                reference(value[1], {1})
+            elif tag in {17, 18}:
+                reference(value[1], {12})  # first value is a bootstrap index
+            elif tag == 15:
+                kind, target = value
+                if not 1 <= kind <= 9:
+                    return False
+                tags = {9} if kind <= 4 else ({11} if kind == 9 else {10})
+                if kind in {6, 7} and major >= 52:
+                    tags = {10, 11}
+                reference(target, tags)
+        number(2)  # class access flags
+        reference(number(2), {7})
+        superclass = number(2)
+        if superclass:
+            reference(superclass, {7})
+        for _ in range(number(2)):
+            reference(number(2), {7})
+        members()  # fields
+        members()  # methods
+        attributes()
+        return position == len(data)
+    except (ValueError, IndexError, UnicodeError, struct.error):
+        return False
+
+
 def portable_binary_dependencies(root: Path, arch: str) -> dict:
     """Reject foreign architecture and undeclared absolute dylib dependencies.
 
@@ -110,6 +224,10 @@ def portable_binary_dependencies(root: Path, arch: str) -> dict:
             continue
         with item.open("rb") as stream:
             header = stream.read(4)
+            if header == b"\xca\xfe\xba\xbe":
+                prefix = header + stream.read(6)
+                if java_class_header(prefix) and is_java_class(prefix + stream.read(JAVA_CLASS_LIMIT + 1 - len(prefix))):
+                    continue
         if header not in MACHO_MAGICS:
             continue
         checked += 1

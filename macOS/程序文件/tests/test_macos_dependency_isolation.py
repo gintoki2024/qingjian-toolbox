@@ -66,3 +66,32 @@ def test_external_dependency_locations_are_rejected(isolated, tmp_path, escape):
             mock.patch.object(module.importlib, "import_module", side_effect=[SimpleNamespace(__file__=path) for path in files]):
         with pytest.raises(AssertionError, match="outside packaged Python"):
             module._dependency_isolation(runtime.parent, runtime)
+
+
+def test_source_ui_reads_supplied_receipts_without_preparation(tmp_path, monkeypatch):
+    module = verifier()
+    home, project = tmp_path / "prepared-source-home", tmp_path / "source"
+    native = {"ready": True, "components": {}, "env": {"QINGJIAN_SOURCE_UI_TEST": "ready"}}
+    monkeypatch.setenv("QINGJIAN_SOURCE_UI_TEST", "not-ready")
+    with mock.patch("startup_macos_native.check_native", return_value=native) as check, \
+            mock.patch("startup_macos_native.ensure_native", side_effect=AssertionError("no preparation")):
+        assert module._source_ui_native(project, home) == native
+    check.assert_called_once_with(project, home, architecture=module.platform.machine())
+    import os
+    assert os.environ["QINGJIAN_SOURCE_UI_TEST"] == "ready"
+
+
+def test_source_ui_requires_absolute_home_and_complete_receipts(tmp_path):
+    module = verifier()
+    with pytest.raises(ValueError, match="绝对路径"):
+        module._source_ui_native(tmp_path, Path("relative-home"))
+    with mock.patch("startup_macos_native.check_native", return_value={"ready": False, "missing": ["OFD"]}):
+        with pytest.raises(RuntimeError, match="未就绪.*OFD"):
+            module._source_ui_native(tmp_path, tmp_path / "absent-home")
+
+
+def test_source_ui_cannot_be_combined_with_offscreen_api_preflight(tmp_path):
+    module = verifier()
+    with mock.patch.object(module, "deny_network", side_effect=AssertionError("validation must occur first")):
+        with pytest.raises(ValueError, match="不能同时"):
+            module.native_ui(tmp_path, tmp_path / "report.json", source_home=tmp_path, api_preflight=True)

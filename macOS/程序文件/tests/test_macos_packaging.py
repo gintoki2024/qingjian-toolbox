@@ -400,6 +400,99 @@ def test_binary_scan_reports_tool_errors_and_continues_to_other_files(tmp_path, 
     assert "bad-dependency.dylib -> libnotbundled.dylib" in str(caught.value)
 
 
+def minimal_java_class():
+    import struct
+    utf8 = lambda text: b"\x01" + struct.pack(">H", len(text)) + text
+    pool = utf8(b"Sample") + b"\x07\x00\x01" + utf8(b"java/lang/Object") + b"\x07\x00\x03"
+    return b"\xca\xfe\xba\xbe" + struct.pack(">HHH", 0, 61, 5) + pool + struct.pack(">HHHHHHH", 0x21, 2, 4, 0, 0, 0, 0)
+
+
+def test_class_structure_recognizes_actual_bundled_java_resources():
+    project = Path(build_macos.__file__).parent
+    files = sorted((project / "support/OFD/licenses/bcprov-jdk18on-1.85").glob("*.class"))
+    assert {path.name for path in files} == {"LICENSE.class", "NoticeReference.class"}
+    assert all(build_macos.is_java_class(path.read_bytes()) for path in files)
+    assert build_macos.is_java_class(minimal_java_class())
+
+
+def test_binary_scan_skips_valid_java_without_using_the_filename(tmp_path, monkeypatch):
+    (tmp_path / "java-resource.bin").write_bytes(minimal_java_class())
+    (tmp_path / "native.dylib").write_bytes(b"\xcf\xfa\xed\xfe")
+    project = Path(build_macos.__file__).parent
+    for path in (project / "support/OFD/licenses/bcprov-jdk18on-1.85").glob("*.class"):
+        (tmp_path / path.name).write_bytes(path.read_bytes())
+    calls = []
+
+    def inspect(command):
+        calls.append(command)
+        assert Path(command[-1]).name == "native.dylib"
+        return "arm64\n" if "lipo" in command[0] else otool_load_commands(("LC_LOAD_DYLIB", "/usr/lib/libSystem.B.dylib"))
+
+    monkeypatch.setattr(build_macos, "run", inspect)
+    assert build_macos.portable_binary_dependencies(tmp_path, "arm64")["macho_files"] == 1
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("universal", [False, True])
+def test_real_macho_renamed_class_still_receives_architecture_checks(tmp_path, monkeypatch, universal):
+    import struct
+    # A complete empty MH_OBJECT header; the FAT case wraps the same x86_64
+    # object with a valid architecture table and aligned payload offset.
+    payload = struct.pack("<IiiIIIII", 0xfeedfacf, 0x1000007, 3, 1, 0, 0, 0, 0)
+    if universal:
+        payload = struct.pack(">IIIIIII", 0xcafebabe, 1, 0x1000007, 3, 28, len(payload), 2) + payload
+    binary = tmp_path / "real-native.class"
+    binary.write_bytes(payload)
+    calls = []
+
+    def inspect(command):
+        calls.append(command)
+        return "x86_64\n"
+
+    monkeypatch.setattr(build_macos, "run", inspect)
+    with pytest.raises(RuntimeError, match="包含其他架构"):
+        build_macos.portable_binary_dependencies(tmp_path, "arm64")
+    assert calls[0] == ["/usr/bin/lipo", "-archs", str(binary)]
+
+
+def test_macho_renamed_class_still_receives_dependency_checks(tmp_path, monkeypatch):
+    binary = tmp_path / "native.class"
+    binary.write_bytes(b"\xcf\xfa\xed\xfe")
+    monkeypatch.setattr(build_macos, "run", lambda command: "arm64\n" if "lipo" in command[0] else otool_load_commands(("LC_LOAD_DYLIB", "libexternal.dylib")))
+    with pytest.raises(RuntimeError, match="native.class -> libexternal.dylib"):
+        build_macos.portable_binary_dependencies(tmp_path, "arm64")
+
+
+@pytest.mark.parametrize("damage", ["truncated", "extra", "bad_tag", "bad_reference", "bad_attribute", "bad_version"])
+def test_malformed_java_lookalike_is_not_skipped(tmp_path, monkeypatch, damage):
+    data = bytearray(minimal_java_class())
+    if damage == "truncated":
+        data = data[:-1]
+    elif damage == "extra":
+        data += b"unparsed bytes"
+    elif damage == "bad_tag":
+        data[10] = 0xff
+    elif damage == "bad_reference":
+        data[-12:-10] = b"\xff\xff"  # this_class must reference CONSTANT_Class
+    elif damage == "bad_attribute":
+        data[-2:] = b"\x00\x01"  # one declared class attribute but no payload
+    elif damage == "bad_version":
+        data[6:8] = b"\x00\x02"  # not a Java class version
+    assert not build_macos.is_java_class(bytes(data))
+    binary = tmp_path / "malformed.class"
+    binary.write_bytes(data)
+    calls = []
+
+    def fail_inspection(command):
+        calls.append(command)
+        raise OSError("not a valid Mach-O file")
+
+    monkeypatch.setattr(build_macos, "run", fail_inspection)
+    with pytest.raises(RuntimeError, match="无法检查原生文件架构"):
+        build_macos.portable_binary_dependencies(tmp_path, "arm64")
+    assert calls, "Malformed CAFEBABE resources must not be silently ignored"
+
+
 def test_workflow_is_only_manual_and_does_not_publish():
     workflow = (Path(package.__file__).parent / "macos_build/workflows/build-macos.yml").read_text(encoding="utf-8")
     assert "workflow_dispatch:" in workflow and "timeout-minutes: 35" in workflow
