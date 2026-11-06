@@ -2,6 +2,25 @@
 
 面向日常职场办公的本地工具合集，使用 Python + Qt，提供独立中文界面。重点是公文批量处理、材料核查与拖拽转换。
 
+<!-- MACOS_DOWNLOADS -->
+## macOS 试用版 v0.12.0
+
+[打开 Mac 下载页](https://github.com/gintoki2024/qingjian-toolbox/releases/tag/v0.12.0-macOS)。适用 macOS 14.4 及以上；首次运行完整包无需安装 Python 或转换组件。
+
+| Mac 下载包 | 适用电脑 |
+| --- | --- |
+| [轻量源码包](https://github.com/gintoki2024/qingjian-toolbox/releases/download/v0.12.0-macOS/QingjianToolbox-v0.12.0-macOS-Source.zip) | 苹果芯片 / Intel 通用；首次补齐组件需要联网，可复用已有兼容 Python 或选择部署位置 |
+| [苹果芯片完整包](https://github.com/gintoki2024/qingjian-toolbox/releases/download/v0.12.0-macOS/QingjianToolbox-v0.12.0-macOS-arm64-Full.zip) | M 系列 Mac，arm64 |
+| [Intel 完整包](https://github.com/gintoki2024/qingjian-toolbox/releases/download/v0.12.0-macOS/QingjianToolbox-v0.12.0-macOS-x86_64-Full.zip) | Intel Mac，x86_64 |
+
+完整解压后双击 `启动青简工具箱.command`。根目录仅有启动器、使用说明、程序文件三项；源码升级保留包外共享环境。两种架构均完成真实 Mac 启动、27 页界面、57 项业务、9 项原生转换及 187 项针对性回归，附 SHA256 和来源记录。
+
+本版未提供 Apple Developer ID 签名或公证，首次打开按随包说明通过系统“隐私与安全性”的正常入口处理。Finder 拖住文件时的滚轮翻页、通知/休眠唤醒及多屏吸附仍需实际桌面操作确认；Mac 字体差异可能影响公文分页。
+
+![青简工具箱 Mac 实际界面](docs/images/macos-home.png)
+
+## Windows 当前正式版
+
 <!-- DOWNLOAD_LINK -->
 [下载 v0.11.2](https://github.com/gintoki2024/qingjian-toolbox/releases/tag/v0.11.2) · [全部版本](https://github.com/gintoki2024/qingjian-toolbox/releases)
 
@@ -40,7 +59,7 @@
 
 组合流程当前支持：表格合并与拆分、数据清洗与检查、模板批量生成、Word 转 PDF、图片压缩或合成 PDF、PDF 页面整理、文件复制归档、Word 章节合并与拆分、文档导出与图片提取、表格打印排版与 PDF、PDF 压缩与标记、报送材料装订。需区分两组输入或需要交互确认的对账、核查、检索和查重保留独立入口；可在流程页查看“步骤范围”。
 
-## 开始使用
+## Windows 开始使用
 
 1. 下载一种命名的 ZIP，**完整解压**到可写文件夹。
 2. 打开解压后的文件夹，双击 `启动青简工具箱.cmd`。不要在压缩软件内直接启动，也不要只复制启动器。
