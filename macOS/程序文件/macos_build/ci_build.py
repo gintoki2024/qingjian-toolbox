@@ -68,6 +68,8 @@ def main(home: Path, output: Path) -> dict:
         raise RuntimeError("环境准备没有生成约定的可移动 Python。")
     execute([str(python), str(PROJECT / "bootstrap_macos.py"), "--check-environment", "--home", str(home),
              "--python", str(python), "--offline", "--no-ui"])
+    # Imports alone cannot detect incompatible transitive package metadata.
+    execute([str(python), "-I", "-m", "pip", "--isolated", "check"])
     execute([str(python), "-c", "import sys; from startup_macos_native import ensure_redistribution_materials; "
              "ensure_redistribution_materials(sys.argv[1], sys.argv[2], emit=print)", str(PROJECT), str(home)])
     execute([str(python), str(PROJECT / "build_macos.py"), "--output", str(output / "build"),

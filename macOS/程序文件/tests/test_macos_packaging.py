@@ -178,6 +178,63 @@ def test_runtime_sanitizer_removes_unused_windows_pip_stubs_and_absolute_wrapper
     assert (site / "runtime.py").is_file()
 
 
+def test_sanitizer_removes_only_optional_qt_sql_drivers_from_the_private_copy(tmp_path):
+    import shutil
+    shared = tmp_path / "shared-runtime"
+    (shared / "bin").mkdir(parents=True)
+    (shared / "bin/python3").write_bytes(b"python")
+    site = Path("lib/python3.13/site-packages")
+    drivers = site / "PySide6/Qt/plugins/sqldrivers"
+    for name in ("libqsqlmimer.dylib", "libqsqlpsql.dylib", "libqsqlodbc.dylib", "libqsqlite.dylib"):
+        file = shared / drivers / name
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_bytes(b"optional database plugin")
+    kept = (site / "PySide6/Qt/plugins/platforms/libqcocoa.dylib", site / "PySide6/QtSql.abi3.so",
+            site / "PySide6_Essentials.dist-info/licenses/QtSql-LICENSE.txt", site / "otherpackage/sqldrivers/plugin.py")
+    for relative in kept:
+        file = shared / relative
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_bytes(b"keep")
+    private = tmp_path / "private-runtime"
+    shutil.copytree(shared, private)
+    build_macos.sanitize_runtime(private)
+    assert not (private / drivers).exists()
+    assert all((private / relative).read_bytes() == b"keep" for relative in kept)
+    assert len(list((shared / drivers).glob("*.dylib"))) == 4
+
+
+def test_product_does_not_depend_on_removed_qt_sql_plugins():
+    import ast
+    package_root = Path(build_macos.__file__).parent / "qingjian"
+    for path in package_root.rglob("*.py"):
+        source = path.read_text(encoding="utf-8-sig")
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                assert all(not alias.name.startswith("PySide6.QtSql") for alias in node.names), path
+            elif isinstance(node, ast.ImportFrom):
+                assert not (node.module or "").startswith("PySide6.QtSql"), path
+                assert not (node.module == "PySide6" and any(alias.name == "QtSql" for alias in node.names)), path
+        assert "QSqlDatabase" not in source and "PySide6.QtSql" not in source, path
+
+
+def test_sanitizer_does_not_follow_qt_driver_symlink_outside_runtime(tmp_path):
+    runtime = tmp_path / "runtime"
+    (runtime / "bin").mkdir(parents=True)
+    outside = tmp_path / "shared-driver-files"
+    outside.mkdir()
+    (outside / "libqsqlmimer.dylib").write_bytes(b"shared original")
+    plugins = runtime / "lib/python3.13/site-packages/PySide6/Qt/plugins"
+    plugins.mkdir(parents=True)
+    try:
+        (plugins / "sqldrivers").symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip("Host cannot create test symlinks: " + str(exc))
+    with pytest.raises(RuntimeError, match="包内普通目录"):
+        build_macos.sanitize_runtime(runtime)
+    assert (outside / "libqsqlmimer.dylib").read_bytes() == b"shared original"
+
+
 def test_component_inventory_uses_packaged_interpreter_and_actual_metadata(tmp_path, monkeypatch):
     program = tmp_path / "程序文件"
     program.mkdir()
@@ -297,6 +354,50 @@ def test_load_command_parser_ignores_rpaths_and_architecture_headers():
 def test_load_command_parser_fails_if_dependency_name_cannot_be_read(output):
     with pytest.raises(RuntimeError, match="名称"):
         build_macos.loaded_dylibs(output)
+
+
+def test_binary_scan_aggregates_all_external_libraries_and_wrong_architectures(tmp_path, monkeypatch):
+    names = ("a.dylib", "b.dylib", "c-wrong-arch.dylib")
+    for name in names:
+        (tmp_path / name).write_bytes(b"\xcf\xfa\xed\xfe")
+    calls = []
+
+    def inspect(command):
+        name = Path(command[-1]).name
+        calls.append(name)
+        if "lipo" in command[0]:
+            return "x86_64\n" if name == "c-wrong-arch.dylib" else "arm64\n"
+        if name == "a.dylib":
+            return otool_load_commands(("LC_LOAD_DYLIB", "/usr/local/lib/libmimerapi.dylib"),
+                                       ("LC_LOAD_WEAK_DYLIB", "libanother.dylib"))
+        return otool_load_commands(("LC_REEXPORT_DYLIB", "/opt/homebrew/lib/libother.dylib"))
+
+    monkeypatch.setattr(build_macos, "run", inspect)
+    with pytest.raises(RuntimeError) as caught:
+        build_macos.portable_binary_dependencies(tmp_path, "arm64")
+    message = str(caught.value)
+    assert "4项" in message
+    assert "a.dylib -> /usr/local/lib/libmimerapi.dylib" in message
+    assert "a.dylib -> libanother.dylib" in message
+    assert "b.dylib -> /opt/homebrew/lib/libother.dylib" in message
+    assert "包含其他架构的原生文件：c-wrong-arch.dylib (x86_64)" in message
+    assert all(name in calls for name in names)
+
+
+def test_binary_scan_reports_tool_errors_and_continues_to_other_files(tmp_path, monkeypatch):
+    for name in ("bad-tool.dylib", "bad-dependency.dylib"):
+        (tmp_path / name).write_bytes(b"\xcf\xfa\xed\xfe")
+
+    def inspect(command):
+        if Path(command[-1]).name == "bad-tool.dylib":
+            raise OSError("fixture inspection tool failure")
+        return "arm64\n" if "lipo" in command[0] else otool_load_commands(("LC_LOAD_DYLIB", "libnotbundled.dylib"))
+
+    monkeypatch.setattr(build_macos, "run", inspect)
+    with pytest.raises(RuntimeError) as caught:
+        build_macos.portable_binary_dependencies(tmp_path, "arm64")
+    assert "bad-tool.dylib：fixture inspection tool failure" in str(caught.value)
+    assert "bad-dependency.dylib -> libnotbundled.dylib" in str(caught.value)
 
 
 def test_workflow_is_only_manual_and_does_not_publish():

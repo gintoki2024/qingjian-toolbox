@@ -104,6 +104,7 @@ def portable_binary_dependencies(root: Path, arch: str) -> dict:
     conversion checks; no install_name_tool rewrite is hidden in packaging.
     """
     checked = 0
+    problems = []
     for item in sorted(root.rglob("*")):
         if item.is_symlink() or not item.is_file():
             continue
@@ -111,14 +112,27 @@ def portable_binary_dependencies(root: Path, arch: str) -> dict:
             header = stream.read(4)
         if header not in MACHO_MAGICS:
             continue
-        arches = run(["/usr/bin/lipo", "-archs", str(item)]).strip().split()
+        checked += 1
+        relative = str(item.relative_to(root))
+        try:
+            arches = run(["/usr/bin/lipo", "-archs", str(item)]).strip().split()
+        except (OSError, subprocess.SubprocessError) as exc:
+            problems.append("无法检查原生文件架构：" + relative + "：" + str(exc))
+            continue
         if arch not in arches:
-            raise RuntimeError("包含其他架构的原生文件：" + str(item.relative_to(root)) + " (" + " ".join(arches) + ")")
-        for dependency in loaded_dylibs(run(["/usr/bin/otool", "-arch", arch, "-l", str(item)])):
+            problems.append("包含其他架构的原生文件：" + relative + " (" + " ".join(arches) + ")")
+            continue
+        try:
+            dependencies = loaded_dylibs(run(["/usr/bin/otool", "-arch", arch, "-l", str(item)]))
+        except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+            problems.append("无法检查原生文件依赖：" + relative + "：" + str(exc))
+            continue
+        for dependency in dependencies:
             if dependency.startswith(("/usr/lib/", "/System/Library/", "@rpath/", "@loader_path/", "@executable_path/")):
                 continue
-            raise RuntimeError("依赖包外的动态库，无法离线分发：" + str(item.relative_to(root)) + " -> " + dependency)
-        checked += 1
+            problems.append("依赖包外的动态库，无法离线分发：" + relative + " -> " + dependency)
+    if problems:
+        raise RuntimeError("完整包原生文件检查未通过（" + str(len(problems)) + "项）：\n" + "\n".join(problems))
     if checked == 0:
         raise RuntimeError("运行环境中没有经过验证的 Mach-O 文件。")
     return {"macho_files": checked, "architecture": arch, "external_absolute_libraries": 0}
@@ -126,6 +140,19 @@ def portable_binary_dependencies(root: Path, arch: str) -> dict:
 
 def sanitize_runtime(runtime: Path) -> None:
     # The original prepared shared runtime remains untouched.
+    runtime = Path(runtime).resolve()
+    # The application does not use QtSql. These optional plugins target
+    # database client SDKs (Mimer/PostgreSQL/ODBC, etc.) that the wheel need not
+    # bundle. Remove the complete unused SQL-driver group in the private copy;
+    # leave Qt modules, normal UI plugins and all license files unchanged.
+    for site in (runtime / "lib").glob("python*/site-packages"):
+        drivers = site / "PySide6/Qt/plugins/sqldrivers"
+        if not drivers.exists() and not drivers.is_symlink():
+            continue
+        if (not drivers.resolve(strict=True).is_relative_to(runtime) or not drivers.is_dir()
+                or any(path.is_symlink() for path in (drivers, *drivers.parents) if path != runtime and runtime in path.parents)):
+            raise RuntimeError("可选 Qt SQL 插件目录不是包内普通目录：" + str(drivers))
+        shutil.rmtree(drivers)
     for item in sorted(runtime.rglob("*"), key=lambda path: len(path.parts), reverse=True):
         if item.is_symlink():
             continue
