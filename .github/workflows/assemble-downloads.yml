@@ -1,0 +1,118 @@
+name: Assemble Windows and macOS download release
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: qingjian-unified-downloads
+  cancel-in-progress: false
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_ID: ${{ inputs.release_id }}
+      SOURCE_MANIFEST: eyJ0YWciOiAiZG93bmxvYWRzLTIwMjYtMTEtMDYiLCAiY2hlY2tzdW1fbmFtZSI6ICJTSEEyNTZTVU1TLURvd25sb2Fkcy0yMDI2LTExLTA2LnR4dCIsICJyZWxlYXNlcyI6IFt7ImlkIjogNDM0NjczMDE3LCAidGFnIjogInYwLjExLjIiLCAicHJlcmVsZWFzZSI6IGZhbHNlfSwgeyJpZCI6IDQzNjE0NzU2NSwgInRhZyI6ICJ2MC4xMi4wLW1hY09TIiwgInByZXJlbGVhc2UiOiB0cnVlfV0sICJhc3NldHMiOiBbeyJpZCI6IDcxMTY2MjQ1NiwgIm5hbWUiOiAiUWluZ2ppYW5Ub29sYm94LXYwLjExLjItU291cmNlLnppcCIsICJzaXplIjogMTQ3MDU0MiwgImRpZ2VzdCI6ICJzaGEyNTY6MGU4YzA1NzU2ZDJlYjM0ZWZhN2JmN2JjOTA5NThiMjhmMTlhNTgxMmI4MGRlMDVlZWE3MGU4ZWQ1MGRlYzI0ZCIsICJyZWxlYXNlX2lkIjogNDM0NjczMDE3LCAibGFiZWwiOiAiV2luZG93c++9nOi9u+mHj+a6kOeggeWMhSB2MC4xMS4yIn0sIHsiaWQiOiA3MTE2NjI0NTUsICJuYW1lIjogIlFpbmdqaWFuVG9vbGJveC12MC4xMS4yLVdpbmRvd3MteDY0LUZ1bGwuemlwIiwgInNpemUiOiA5MTM2ODU0MTgsICJkaWdlc3QiOiAic2hhMjU2OjdhNDA1NTcyODU5Nzk4ZGU1Njc2NDViOWYyNTMwYzMwMDM5ZjBiYmVhMzg4YTUwZWEyYmEyMmVhYmEzZDc3MzQiLCAicmVsZWFzZV9pZCI6IDQzNDY3MzAxNywgImxhYmVsIjogIldpbmRvd3MgeDY0772c5a6M5pW06L+Q6KGM5YyFIHYwLjExLjIifSwgeyJpZCI6IDcxNjEwNjQ5MSwgIm5hbWUiOiAiUWluZ2ppYW5Ub29sYm94LXYwLjEyLjAtbWFjT1MtYXJtNjQtRnVsbC56aXAiLCAic2l6ZSI6IDY3MjIyODI5NCwgImRpZ2VzdCI6ICJzaGEyNTY6MDJmNmM5NGQ3YjgxMjhiZTI5NGZmYWZkZDJmZjk0MzdkZjQ2NmJjNmJmNDEwZmUxMmYyODFmMWUyM2I3MmE4ZCIsICJyZWxlYXNlX2lkIjogNDM2MTQ3NTY1LCAibGFiZWwiOiAiTWFjIEFwcGxlIOiKr+eJh++9nOWujOaVtOi/kOihjOWMhSB2MC4xMi4w77yI6K+V55So54mI77yJIn0sIHsiaWQiOiA3MTYxMDgzNzMsICJuYW1lIjogIlFpbmdqaWFuVG9vbGJveC12MC4xMi4wLW1hY09TLVJlbGVhc2UuanNvbiIsICJzaXplIjogMTM1OSwgImRpZ2VzdCI6ICJzaGEyNTY6ZmI3YjE5YjhjMDUyZjg2Mzc4MDBhMjZiNDhmM2U0ZDlmMDIzZjZjZTQwN2Q4NTlmMzkxOTQ2MTkwYzFlOWUyNyIsICJyZWxlYXNlX2lkIjogNDM2MTQ3NTY1LCAibGFiZWwiOiAiTWFjIOaehOW7uuS4juagoemqjOiusOW9lSJ9LCB7ImlkIjogNzE2MDk5ODM1LCAibmFtZSI6ICJRaW5namlhblRvb2xib3gtdjAuMTIuMC1tYWNPUy1Tb3VyY2UuemlwIiwgInNpemUiOiAxNjA2OTc0LCAiZGlnZXN0IjogInNoYTI1NjpmYTJhNjYzN2E1ZTM5NjBhNDRjOGU0MGQxMzgyNjBlOThmZGZmN2Q3NzMyODMxNDExZTc2YmQzMjJhNjc0ODY2IiwgInJlbGVhc2VfaWQiOiA0MzYxNDc1NjUsICJsYWJlbCI6ICJNYWPvvZzovbvph4/mupDnoIHljIUgdjAuMTIuMO+8iOivleeUqOeJiO+8jEFwcGxlIC8gSW50ZWwg6YCa55So77yJIn0sIHsiaWQiOiA3MTYxMDczMzMsICJuYW1lIjogIlFpbmdqaWFuVG9vbGJveC12MC4xMi4wLW1hY09TLXg4Nl82NC1GdWxsLnppcCIsICJzaXplIjogNjc3OTE2OTgxLCAiZGlnZXN0IjogInNoYTI1Njo3MGM5ZDY4ODU4NmJlYjA4YmE1MzkwMDZiYTY2NjBiY2M4MWY1NTA5Mzc5MGVlMGZmMzdmYjAzYTQ4YmUxZDc2IiwgInJlbGVhc2VfaWQiOiA0MzYxNDc1NjUsICJsYWJlbCI6ICJNYWMgSW50ZWwg6Iqv54mH772c5a6M5pW06L+Q6KGM5YyFIHYwLjEyLjDvvIjor5XnlKjniYjvvIkifV19
+    steps:
+      - name: Copy published packages after size and SHA256 verification
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          """Copy verified published packages into one existing, unpublished download release."""
+          import base64
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import tempfile
+          import time
+          from urllib.parse import quote
+          
+          
+          def gh(*args):
+              result = subprocess.run(['gh', *args], capture_output=True, text=True)
+              if result.returncode:
+                  raise RuntimeError(result.stderr[-3000:])
+              return result.stdout
+          
+          
+          def api(path):
+              return json.loads(gh('api', 'repos/' + REPO + '/' + path))
+          
+          
+          def digest(path):
+              with path.open('rb') as stream:
+                  return 'sha256:' + hashlib.file_digest(stream, 'sha256').hexdigest()
+          
+          
+          def target():
+              value = api('releases/' + RELEASE_ID)
+              assert value['tag_name'] == MANIFEST['tag'] and value['draft'], 'Target must remain the expected draft'
+              assert not value['prerelease'], 'Download index is not a version-specific software release'
+              assert value['upload_url'].startswith('https://uploads.github.com/repos/' + REPO + '/releases/')
+              return value
+          
+          
+          def upload(path, label, expected):
+              release = target()
+              existing = next((a for a in release['assets'] if a['name'] == path.name), None)
+              if existing:
+                  assert existing['digest'] == expected and existing['size'] == path.stat().st_size
+                  assert existing['label'] == label
+                  print('Already verified:', path.name, flush=True)
+                  return
+              url = release['upload_url'].split('{', 1)[0] + '?name=' + quote(path.name, safe='') + '&label=' + quote(label, safe='')
+              response = json.loads(gh('api', '--method', 'POST', url, '-H', 'Content-Type: application/octet-stream', '--input', str(path)))
+              assert response['digest'] == expected and response['size'] == path.stat().st_size
+              assert response['label'] == label
+              print('Uploaded and SHA256 verified:', path.name, path.stat().st_size, flush=True)
+          
+          
+          REPO = os.environ['GH_REPO']
+          RELEASE_ID = os.environ['RELEASE_ID']
+          MANIFEST = json.loads(base64.b64decode(os.environ['SOURCE_MANIFEST']))
+          assert REPO == 'gintoki2024/qingjian-toolbox' and RELEASE_ID.isdecimal()
+          assert MANIFEST['tag'] == 'downloads-2026-11-06'
+          assert len(MANIFEST['assets']) == 6
+          expected_names = {a['name'] for a in MANIFEST['assets']} | {MANIFEST['checksum_name']}
+          assert {a['name'] for a in target()['assets']} <= expected_names, 'Unexpected draft assets'
+          for expected in MANIFEST['releases']:
+              source = api('releases/' + str(expected['id']))
+              assert source['tag_name'] == expected['tag'] and not source['draft']
+              assert source['prerelease'] == expected['prerelease']
+              source_assets = {a['id']: a for a in source['assets']}
+              for item in (a for a in MANIFEST['assets'] if a['release_id'] == expected['id']):
+                  actual = source_assets[item['id']]
+                  assert all(actual[k] == item[k] for k in ('name', 'size', 'digest'))
+          
+          with tempfile.TemporaryDirectory(prefix='qingjian-downloads-') as temporary:
+              root = Path(temporary)
+              for item in MANIFEST['assets']:
+                  path = root / item['name']
+                  assert path.parent == root and path.name == item['name']
+                  for attempt in range(3):
+                      with path.open('wb') as output:
+                          result = subprocess.run(['gh', 'api', 'repos/' + REPO + '/releases/assets/' + str(item['id']),
+                                                   '-H', 'Accept: application/octet-stream'], stdout=output, stderr=subprocess.PIPE)
+                      if result.returncode == 0:
+                          break
+                      if attempt == 2:
+                          raise RuntimeError(result.stderr.decode(errors='replace')[-3000:])
+                      time.sleep(3)
+                  assert path.stat().st_size == item['size'] and digest(path) == item['digest']
+                  upload(path, item['label'], item['digest'])
+                  path.unlink()
+              checksums = root / MANIFEST['checksum_name']
+              checksums.write_text(''.join(a['digest'].split(':', 1)[1] + '  ' + a['name'] + '\n' for a in MANIFEST['assets']), encoding='utf-8')
+              upload(checksums, '下载文件 SHA256 校验值', digest(checksums))
+              current = target()
+              assert {a['name'] for a in current['assets']} == expected_names
+              print('All seven assets verified. Release remains unpublished.', flush=True)
+          PY
