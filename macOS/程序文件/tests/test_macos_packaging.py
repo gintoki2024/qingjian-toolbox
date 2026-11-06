@@ -11,6 +11,47 @@ import zipfile
 import pytest
 
 import build_macos
+
+
+UPSTREAM_FETCH_TEXT = b'svn export --force http://svn.red-bean.com/bob/macholib/trunk/macholib/ .\n'
+
+
+@pytest.mark.parametrize('variant', ['original', 'changed', 'renamed', 'source'])
+def test_only_exact_upstream_signed_app_resource_is_accepted(tmp_path, variant):
+    name = next(iter(package.UPSTREAM_SUPPORT_RESOURCES))
+    data = UPSTREAM_FETCH_TEXT
+    if variant == 'changed':
+        data = b'X' + data[1:]
+    if variant == 'renamed':
+        name = name.replace('fetch_macholib.bat', 'other.bat')
+    path = tmp_path / 'resource.zip'
+    with zipfile.ZipFile(path, 'w') as archive:
+        package._write_bytes(archive, '启动青简工具箱.command', b'#!/bin/bash\nexit 0\n')
+        package._write_bytes(archive, '使用说明.txt', b'fixture')
+        package._write_bytes(archive, name, data)
+    if variant == 'original':
+        assert package.verify_archive(path, source=False)['members'] == 3
+    else:
+        with pytest.raises(RuntimeError, match='Windows'):
+            package.verify_archive(path, source=variant == 'source')
+
+
+def test_native_scan_preserves_and_records_verified_upstream_text(tmp_path, monkeypatch):
+    if os.name == 'nt':
+        tmp_path = Path('\\\\?\\' + str(tmp_path))
+    name = next(iter(package.UPSTREAM_SUPPORT_RESOURCES))
+    resource = tmp_path / name.removeprefix('程序文件/')
+    resource.parent.mkdir(parents=True)
+    resource.write_bytes(UPSTREAM_FETCH_TEXT)
+    (tmp_path / 'python3').write_bytes(b'\xcf\xfa\xed\xfe')
+    monkeypatch.setattr(build_macos, 'run', lambda command: 'arm64\n' if 'lipo' in command[0] else
+                        otool_load_commands(('LC_LOAD_DYLIB', '/usr/lib/libSystem.B.dylib')))
+    result = build_macos.portable_binary_dependencies(tmp_path, 'arm64')
+    assert result['macho_files'] == 1 and len(result['upstream_support_resources']) == 1
+    assert resource.read_bytes() == UPSTREAM_FETCH_TEXT
+    resource.write_bytes(b'X' + UPSTREAM_FETCH_TEXT[1:])
+    with pytest.raises(RuntimeError, match='Windows'):
+        build_macos.portable_binary_dependencies(tmp_path, 'arm64')
 import package_macos as package
 
 

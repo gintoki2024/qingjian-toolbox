@@ -18,7 +18,8 @@ import struct
 import subprocess
 import sys
 
-from package_macos import ROOT_ENTRIES, WINDOWS_SUFFIXES, macos_guide, source_contract, source_files, version_of
+from package_macos import (ROOT_ENTRIES, WINDOWS_SUFFIXES, UPSTREAM_SUPPORT_RESOURCES,
+                           is_upstream_support_resource, macos_guide, source_contract, source_files, version_of)
 
 PROJECT = Path(__file__).resolve().parent
 MACHO_MAGICS = {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca", b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca"}
@@ -218,10 +219,19 @@ def portable_binary_dependencies(root: Path, arch: str) -> dict:
     conversion checks; no install_name_tool rewrite is hidden in packaging.
     """
     checked = 0
+    support_resources = []
     problems = []
     for item in sorted(root.rglob("*")):
         if item.is_symlink() or not item.is_file():
             continue
+        if item.suffix.lower() in WINDOWS_SUFFIXES:
+            archive_name = "程序文件/" + item.relative_to(root).as_posix()
+            spec = UPSTREAM_SUPPORT_RESOURCES.get(archive_name)
+            if (not spec or item.stat().st_size != spec["bytes"]
+                    or not is_upstream_support_resource(archive_name, item.read_bytes())):
+                problems.append("Mac 运行目录中包含 Windows 文件：" + str(item.relative_to(root)))
+                continue
+            support_resources.append({"file": item.relative_to(root).as_posix(), **spec})
         with item.open("rb") as stream:
             header = stream.read(4)
             if header == b"\xca\xfe\xba\xbe":
@@ -253,7 +263,8 @@ def portable_binary_dependencies(root: Path, arch: str) -> dict:
         raise RuntimeError("完整包原生文件检查未通过（" + str(len(problems)) + "项）：\n" + "\n".join(problems))
     if checked == 0:
         raise RuntimeError("运行环境中没有经过验证的 Mach-O 文件。")
-    return {"macho_files": checked, "architecture": arch, "external_absolute_libraries": 0}
+    return {"macho_files": checked, "architecture": arch, "external_absolute_libraries": 0,
+            "upstream_support_resources": support_resources}
 
 
 def sanitize_runtime(runtime: Path) -> None:

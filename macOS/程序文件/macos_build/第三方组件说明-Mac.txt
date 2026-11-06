@@ -4,6 +4,7 @@
 requirements.txt 表示允许的依赖范围；源码中的 requirements-lock.txt 为历史 Windows 参考文件，不能用来宣称 Mac 已安装这些版本。
 
 完整运行包在构建时由包内 Python 的 importlib.metadata 生成“第三方组件清单-Mac.json”，记录 Python 版本、实际包含的直接及间接模块、许可标识和相对许可路径，以及本架构的原生组件来源和版本。实际内容以该清单和对应许可文件为准。
+LibreOffice 官方 Mac 应用的 Python 框架附带 CPython 历史维护文本 fetch_macholib.bat。为保留上游应用资源完整性，不删除或执行该文本；归档仅允许固定原路径、74 字节及已核验 SHA256 的这一份资源，记录在 macos-build-inventory.json。它不作为 Mac 运行组件，其他 Windows 启动文件与二进制仍被拒绝。
 Python 许可位于 Python/lib/python主版本.次版本/LICENSE.txt。各 Python 模块的许可证随其安装文件保留在 Python/lib/python主版本.次版本/site-packages 内，清单中的路径均相对 Python 文件夹。
 
 轻量源码包首次使用时会在所选解释器环境补齐依赖，实际版本以该环境为准，不宣称 Windows 历史锁定文件就是 Mac 的安装清单。

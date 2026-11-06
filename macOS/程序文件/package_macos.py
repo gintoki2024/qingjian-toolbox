@@ -28,6 +28,22 @@ WINDOWS_SUFFIXES = {".exe", ".dll", ".pyd", ".msi", ".cab", ".pdb", ".lib", ".cm
 ARCHIVE_SUFFIXES = {".zip", ".7z", ".tar", ".gz", ".xz", ".bz2", ".dmg", ".pkg"}
 GENERATED_NAMES = {"cmd-package.json", "macos-package.json", "启动诊断.cmd", "build-manifest.json",
                    "macos-build-validation.json", "macos-build-inventory.json"}
+# Preserve the upstream signed LibreOffice.app resource tree. CPython ships
+# this historical, non-runtime maintenance text; it is never executed here.
+# No Windows binary, launcher, arbitrary batch file or different bytes qualify.
+UPSTREAM_SUPPORT_RESOURCES = {
+    "程序文件/native/LibreOffice/LibreOffice.app/Contents/Frameworks/LibreOfficePython.framework/Versions/3.13/lib/python3.13/ctypes/macholib/fetch_macholib.bat": {
+        "bytes": 74,
+        "sha256": "cda880175e916ece98346966b5e081d91f420b5c7c0eeb8443690f2c79b49809",
+        "source": "https://github.com/python/cpython/blob/v3.13.18/Lib/ctypes/macholib/fetch_macholib.bat",
+    },
+}
+
+
+def is_upstream_support_resource(name: str, data: bytes) -> bool:
+    spec = UPSTREAM_SUPPORT_RESOURCES.get(name)
+    return bool(spec and len(data) == spec["bytes"]
+                and hashlib.sha256(data).hexdigest() == spec["sha256"])
 
 
 def digest(path: Path) -> str:
@@ -153,7 +169,10 @@ def verify_archive(path: Path, *, source: bool) -> dict:
             if info.filename.startswith("/") or ".." in rel.parts or "\\" in info.filename:
                 raise RuntimeError("ZIP 路径不安全：" + info.filename)
             if rel.suffix.lower() in WINDOWS_SUFFIXES:
-                raise RuntimeError("Mac 发行包中包含 Windows 文件：" + info.filename)
+                spec = UPSTREAM_SUPPORT_RESOURCES.get(info.filename)
+                if (source or not spec or info.file_size != spec["bytes"]
+                        or not is_upstream_support_resource(info.filename, archive.read(info))):
+                    raise RuntimeError("Mac 发行包中包含 Windows 文件：" + info.filename)
         entry = archive.getinfo("启动青简工具箱.command")
         if (entry.external_attr >> 16) & 0o111 != 0o111 or b"\r" in archive.read(entry):
             raise RuntimeError("Mac 启动器必须保留 Unix 可执行权限与 LF 换行。")
