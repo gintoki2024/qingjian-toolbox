@@ -19,7 +19,8 @@ import subprocess
 import sys
 
 from package_macos import (ROOT_ENTRIES, WINDOWS_SUFFIXES, UPSTREAM_SUPPORT_RESOURCES,
-                           is_upstream_support_resource, macos_guide, source_contract, source_files, version_of)
+                           is_upstream_support_resource, upstream_support_specs, LO_RESOURCE_PREFIX,
+                           macos_guide, source_contract, source_files, version_of)
 
 PROJECT = Path(__file__).resolve().parent
 MACHO_MAGICS = {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca", b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca"}
@@ -211,24 +212,33 @@ def is_java_class(data: bytes) -> bool:
         return False
 
 
-def portable_binary_dependencies(root: Path, arch: str) -> dict:
+def portable_binary_dependencies(root: Path, arch: str, project: Path = PROJECT) -> dict:
     """Reject foreign architecture and undeclared absolute dylib dependencies.
 
     macOS system libraries remain provided by macOS. @rpath/loader/executable
     references are left to dyld and exercised by the actual offline launch and
     conversion checks; no install_name_tool rewrite is hidden in packaging.
+    Listed upstream packaging resources are receipt-checked data, not engines;
+    preserve the original application's sealed resource tree and record them.
     """
     checked = 0
     support_resources = []
+    support_specs = None
     problems = []
     for item in sorted(root.rglob("*")):
         if item.is_symlink() or not item.is_file():
             continue
         if item.suffix.lower() in WINDOWS_SUFFIXES:
             archive_name = "程序文件/" + item.relative_to(root).as_posix()
-            spec = UPSTREAM_SUPPORT_RESOURCES.get(archive_name)
+            if archive_name in UPSTREAM_SUPPORT_RESOURCES and support_specs is None:
+                receipt_path = root / LO_RESOURCE_PREFIX.removeprefix('程序文件/') / '.qingjian-macos-native.json'
+                if receipt_path.is_symlink() or receipt_path.stat().st_size > 12 * 1024 ** 2:
+                    raise RuntimeError("上游 Mac 应用收据无效。")
+                receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
+                support_specs = upstream_support_specs(receipt, arch, project)
+            spec = (support_specs or {}).get(archive_name)
             if (not spec or item.stat().st_size != spec["bytes"]
-                    or not is_upstream_support_resource(archive_name, item.read_bytes())):
+                    or not is_upstream_support_resource(archive_name, item.read_bytes(), support_specs)):
                 problems.append("Mac 运行目录中包含 Windows 文件：" + str(item.relative_to(root)))
                 continue
             support_resources.append({"file": item.relative_to(root).as_posix(), **spec})
@@ -459,7 +469,7 @@ def build(output: Path, runtime: Path, native_home: Path, project: Path = PROJEC
     if not check_redistribution_materials(program, program, architecture=arch).get("ready"):
         raise RuntimeError("复制后的许可与对应源码材料校验失败。")
     links = verify_links(bundle)
-    binaries = portable_binary_dependencies(program, arch)
+    binaries = portable_binary_dependencies(program, arch, project)
     if {item.name for item in bundle.iterdir()} != ROOT_ENTRIES:
         raise RuntimeError("完整包根目录必须恰好三项。")
     # Every installed dependency is checked by the packaged interpreter, with

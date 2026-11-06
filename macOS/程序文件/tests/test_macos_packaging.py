@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 from pathlib import Path
@@ -11,14 +12,26 @@ import zipfile
 import pytest
 
 import build_macos
+import package_macos as package
 
 
 UPSTREAM_FETCH_TEXT = b'svn export --force http://svn.red-bean.com/bob/macholib/trunk/macholib/ .\n'
 
 
+def support_receipt(resources, arch='arm64'):
+    from startup_macos_native import _signature, load_manifest
+    manifest = load_manifest(package.PROJECT, architecture=arch)
+    return {'schema_version': 1, 'component': 'LibreOffice', 'architecture': arch,
+            'signature': _signature(manifest['components']['LibreOffice'], manifest, arch),
+            'files': [{'file': name.removeprefix(package.LO_RESOURCE_PREFIX), 'bytes': len(data),
+                       'sha256': hashlib.sha256(data).hexdigest(), 'executable': False}
+                      for name, data in resources.items()]}
+
+
 @pytest.mark.parametrize('variant', ['original', 'changed', 'renamed', 'source'])
 def test_only_exact_upstream_signed_app_resource_is_accepted(tmp_path, variant):
-    name = next(iter(package.UPSTREAM_SUPPORT_RESOURCES))
+    original_name = package.LO_PYTHON_PREFIX + 'ctypes/macholib/fetch_macholib.bat'
+    name = original_name
     data = UPSTREAM_FETCH_TEXT
     if variant == 'changed':
         data = b'X' + data[1:]
@@ -29,20 +42,26 @@ def test_only_exact_upstream_signed_app_resource_is_accepted(tmp_path, variant):
         package._write_bytes(archive, '启动青简工具箱.command', b'#!/bin/bash\nexit 0\n')
         package._write_bytes(archive, '使用说明.txt', b'fixture')
         package._write_bytes(archive, name, data)
+        package._write_bytes(archive, '程序文件/macos-package.json',
+                             json.dumps({'mode': 'offline', 'architecture': 'arm64'}).encode())
+        package._write_bytes(archive, package.LO_RESOURCE_PREFIX + '.qingjian-macos-native.json',
+                             json.dumps(support_receipt({original_name: UPSTREAM_FETCH_TEXT})).encode())
     if variant == 'original':
-        assert package.verify_archive(path, source=False)['members'] == 3
+        assert package.verify_archive(path, source=False)['members'] == 5
     else:
-        with pytest.raises(RuntimeError, match='Windows'):
+        with pytest.raises(RuntimeError, match='Windows|不一致'):
             package.verify_archive(path, source=variant == 'source')
 
 
 def test_native_scan_preserves_and_records_verified_upstream_text(tmp_path, monkeypatch):
     if os.name == 'nt':
         tmp_path = Path('\\\\?\\' + str(tmp_path))
-    name = next(iter(package.UPSTREAM_SUPPORT_RESOURCES))
+    name = package.LO_PYTHON_PREFIX + 'ctypes/macholib/fetch_macholib.bat'
     resource = tmp_path / name.removeprefix('程序文件/')
     resource.parent.mkdir(parents=True)
     resource.write_bytes(UPSTREAM_FETCH_TEXT)
+    receipt = tmp_path / 'native/LibreOffice/.qingjian-macos-native.json'
+    receipt.write_text(json.dumps(support_receipt({name: UPSTREAM_FETCH_TEXT})), encoding='utf-8')
     (tmp_path / 'python3').write_bytes(b'\xcf\xfa\xed\xfe')
     monkeypatch.setattr(build_macos, 'run', lambda command: 'arm64\n' if 'lipo' in command[0] else
                         otool_load_commands(('LC_LOAD_DYLIB', '/usr/lib/libSystem.B.dylib')))
@@ -52,7 +71,31 @@ def test_native_scan_preserves_and_records_verified_upstream_text(tmp_path, monk
     resource.write_bytes(b'X' + UPSTREAM_FETCH_TEXT[1:])
     with pytest.raises(RuntimeError, match='Windows'):
         build_macos.portable_binary_dependencies(tmp_path, 'arm64')
-import package_macos as package
+
+
+@pytest.mark.parametrize('name', sorted(package.UPSTREAM_SUPPORT_RESOURCES))
+def test_upstream_resource_bytes_must_match_original_receipt(name):
+    data = b'MZ-fictional-packaging-template' if name.endswith('.exe') else UPSTREAM_FETCH_TEXT
+    specs = package.upstream_support_specs(support_receipt({name: data}), 'arm64')
+    assert package.is_upstream_support_resource(name, data, specs)
+    assert not package.is_upstream_support_resource(name, data + b'changed', specs)
+    assert not package.is_upstream_support_resource('程序文件/Python/bin/other.exe', data, specs)
+    if name.endswith('.exe'):
+        macho = b'\xcf\xfa\xed\xfe' + b'fictional-native-code'
+        altered = package.upstream_support_specs(support_receipt({name: macho}), 'arm64')
+        assert not package.is_upstream_support_resource(name, macho, altered)
+
+
+@pytest.mark.parametrize('bad', ['signature', 'architecture', 'duplicate'])
+def test_upstream_resource_receipt_must_match_pinned_macos_component(bad):
+    name = package.LO_PYTHON_PREFIX + 'ctypes/macholib/fetch_macholib.bat'
+    receipt = support_receipt({name: UPSTREAM_FETCH_TEXT})
+    if bad == 'duplicate':
+        receipt['files'].append(receipt['files'][0])
+    else:
+        receipt[bad] = 'wrong'
+    with pytest.raises(RuntimeError):
+        package.upstream_support_specs(receipt, 'arm64')
 
 
 @pytest.fixture

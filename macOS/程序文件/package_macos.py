@@ -28,22 +28,79 @@ WINDOWS_SUFFIXES = {".exe", ".dll", ".pyd", ".msi", ".cab", ".pdb", ".lib", ".cm
 ARCHIVE_SUFFIXES = {".zip", ".7z", ".tar", ".gz", ".xz", ".bz2", ".dmg", ".pkg"}
 GENERATED_NAMES = {"cmd-package.json", "macos-package.json", "启动诊断.cmd", "build-manifest.json",
                    "macos-build-validation.json", "macos-build-inventory.json"}
-# Preserve the upstream signed LibreOffice.app resource tree. CPython ships
-# this historical, non-runtime maintenance text; it is never executed here.
-# No Windows binary, launcher, arbitrary batch file or different bytes qualify.
-UPSTREAM_SUPPORT_RESOURCES = {
-    "程序文件/native/LibreOffice/LibreOffice.app/Contents/Frameworks/LibreOfficePython.framework/Versions/3.13/lib/python3.13/ctypes/macholib/fetch_macholib.bat": {
-        "bytes": 74,
-        "sha256": "cda880175e916ece98346966b5e081d91f420b5c7c0eeb8443690f2c79b49809",
-        "source": "https://github.com/python/cpython/blob/v3.13.18/Lib/ctypes/macholib/fetch_macholib.bat",
-    },
-}
+# Keep the official application's resource seal intact. These exact stdlib /
+# packaging-tool resources were found in the pinned Mac LibreOffice DMG. The
+# EXEs are templates for generating Windows entry points, never Mac engines.
+# Their bytes must match the ORIGINAL verified extraction receipt; no newly
+# generated receipt, arbitrary path, or application's own runtime qualifies.
+LO_RESOURCE_PREFIX = "程序文件/native/LibreOffice/"
+LO_PYTHON_PREFIX = LO_RESOURCE_PREFIX + "LibreOffice.app/Contents/Frameworks/LibreOfficePython.framework/Versions/3.13/lib/python3.13/"
+UPSTREAM_SUPPORT_RESOURCES = frozenset(
+    [LO_PYTHON_PREFIX + "ctypes/macholib/fetch_macholib.bat",
+     LO_PYTHON_PREFIX + "venv/scripts/common/Activate.ps1"]
+    + [LO_PYTHON_PREFIX + "site-packages/pip/_vendor/distlib/" + name + ".exe"
+       for name in ("t32", "t64", "t64-arm", "w32", "w64", "w64-arm")]
+    + [LO_PYTHON_PREFIX + "site-packages/setuptools/" + name + ".exe"
+       for name in ("cli", "cli-32", "cli-64", "cli-arm64", "gui", "gui-32", "gui-64", "gui-arm64")]
+)
 
 
-def is_upstream_support_resource(name: str, data: bytes) -> bool:
-    spec = UPSTREAM_SUPPORT_RESOURCES.get(name)
-    return bool(spec and len(data) == spec["bytes"]
-                and hashlib.sha256(data).hexdigest() == spec["sha256"])
+def upstream_support_specs(receipt: dict, arch: str, project: Path = PROJECT) -> dict:
+    from startup_macos_native import _signature, load_manifest
+    manifest = load_manifest(project, arch)
+    component = manifest["components"]["LibreOffice"]
+    artifact = manifest["artifacts"][component["artifact"]]
+    if (receipt.get("schema_version") != 1 or receipt.get("component") != "LibreOffice"
+            or receipt.get("architecture") != arch
+            or receipt.get("signature") != _signature(component, manifest, arch)):
+        raise RuntimeError("上游 Mac 资源收据与固定 LibreOffice 来源不一致。")
+    rows = receipt.get("files")
+    if not isinstance(rows, list) or not 1 <= len(rows) <= 30000:
+        raise RuntimeError("上游 Mac 资源收据文件清单无效。")
+    result, seen = {}, set()
+    for row in rows:
+        name = row.get("file") if isinstance(row, dict) else None
+        if not isinstance(name, str) or name in seen:
+            raise RuntimeError("上游 Mac 资源收据包含重复或无效路径。")
+        seen.add(name)
+        full = LO_RESOURCE_PREFIX + name
+        if full not in UPSTREAM_SUPPORT_RESOURCES:
+            continue
+        if ("link" in row or type(row.get("bytes")) is not int or not 0 < row["bytes"] <= 2 * 1024 ** 2
+                or not re.fullmatch(r"[0-9a-f]{64}", str(row.get("sha256", "")))):
+            raise RuntimeError("上游 Mac 支持资源的原始大小或摘要无效：" + name)
+        result[full] = {"bytes": row["bytes"], "sha256": row["sha256"],
+                        "source_archive": artifact["filename"], "source_archive_sha256": artifact["sha256"],
+                        "role": "upstream-packaging-resource; never executed by Qingjian"}
+    return result
+
+
+def is_upstream_support_resource(name: str, data: bytes, specs: dict) -> bool:
+    spec = specs.get(name) if name in UPSTREAM_SUPPORT_RESOURCES else None
+    if not (spec and len(data) == spec["bytes"] and hashlib.sha256(data).hexdigest() == spec["sha256"]):
+        return False
+    if name.endswith(".exe"):
+        return data.startswith(b"MZ")
+    try:
+        return b"\0" not in data and bool(data.decode("utf-8-sig").strip())
+    except UnicodeError:
+        return False
+
+
+def archive_support_specs(archive: zipfile.ZipFile) -> dict:
+    def metadata(name, maximum):
+        info = archive.getinfo(name)
+        if info.file_size > maximum or stat.S_ISLNK(info.external_attr >> 16):
+            raise RuntimeError("上游资源的校验元信息无效：" + name)
+        value = json.loads(archive.read(info).decode("utf-8-sig"))
+        if not isinstance(value, dict):
+            raise RuntimeError("上游资源的校验元信息不是对象。")
+        return value
+    marker = metadata("程序文件/macos-package.json", 32768)
+    if marker.get("mode") != "offline" or marker.get("architecture") not in {"arm64", "x86_64"}:
+        raise RuntimeError("只有对应架构完整包可保留上游应用资源。")
+    receipt = metadata(LO_RESOURCE_PREFIX + ".qingjian-macos-native.json", 12 * 1024 ** 2)
+    return upstream_support_specs(receipt, marker["architecture"])
 
 
 def digest(path: Path) -> str:
@@ -164,15 +221,20 @@ def verify_archive(path: Path, *, source: bool) -> dict:
             raise RuntimeError("ZIP 内有重复路径。")
         if {name.split("/")[0] for name in names} != ROOT_ENTRIES:
             raise RuntimeError("解压后根目录必须只有启动器、说明和程序文件三项。")
+        support_specs = None
         for info in archive.infolist():
             rel = Path(info.filename)
             if info.filename.startswith("/") or ".." in rel.parts or "\\" in info.filename:
                 raise RuntimeError("ZIP 路径不安全：" + info.filename)
             if rel.suffix.lower() in WINDOWS_SUFFIXES:
-                spec = UPSTREAM_SUPPORT_RESOURCES.get(info.filename)
-                if (source or not spec or info.file_size != spec["bytes"]
-                        or not is_upstream_support_resource(info.filename, archive.read(info))):
+                if source or info.filename not in UPSTREAM_SUPPORT_RESOURCES:
                     raise RuntimeError("Mac 发行包中包含 Windows 文件：" + info.filename)
+                if support_specs is None:
+                    support_specs = archive_support_specs(archive)
+                spec = support_specs.get(info.filename)
+                if (not spec or stat.S_ISLNK(info.external_attr >> 16) or info.file_size != spec["bytes"]
+                        or not is_upstream_support_resource(info.filename, archive.read(info), support_specs)):
+                    raise RuntimeError("Mac 上游支持资源与原始收据不一致：" + info.filename)
         entry = archive.getinfo("启动青简工具箱.command")
         if (entry.external_attr >> 16) & 0o111 != 0o111 or b"\r" in archive.read(entry):
             raise RuntimeError("Mac 启动器必须保留 Unix 可执行权限与 LF 换行。")
