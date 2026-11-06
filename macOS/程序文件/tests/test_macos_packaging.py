@@ -272,3 +272,22 @@ def test_source_contains_runtime_native_license_notices(source, tmp_path):
     package.package_source(source, output)
     with zipfile.ZipFile(output) as archive:
         assert '程序文件/support/macos/licenses/python/LICENSE.openssl-3.txt' in archive.namelist()
+
+
+def test_sanitize_removes_only_aliases_to_removed_console_scripts(tmp_path):
+    binary = tmp_path / 'bin'
+    binary.mkdir()
+    (binary / 'python3.13').write_bytes(b'\xcf\xfa\xed\xfe' + b'python')
+    (binary / 'idle3.13').write_bytes(b'#!/build/path/python3\nprint("idle")\n')
+    try:
+        (binary / 'idle3').symlink_to('idle3.13')
+        (binary / 'idle-alias').symlink_to('idle3')
+        (binary / 'python3').symlink_to('python3.13')
+        (binary / 'unknown-tool').symlink_to('missing-unrelated')
+    except OSError as exc:
+        pytest.skip('Host cannot create test symlinks: ' + str(exc))
+    build_macos.sanitize_runtime(tmp_path)
+    assert not (binary / 'idle3.13').exists() and not (binary / 'idle3').is_symlink()
+    assert not (binary / 'idle-alias').is_symlink()
+    assert (binary / 'python3').is_symlink() and (binary / 'python3').is_file()
+    assert (binary / 'unknown-tool').is_symlink()
