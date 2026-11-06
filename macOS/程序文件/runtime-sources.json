@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-10-29",
+  "python": {
+    "version": "3.13.17",
+    "filename": "python-3.13.17-amd64.zip",
+    "bytes": 31162518,
+    "sha256": "b26ca4b4ee51e157836049934d2b8eabd55939be296f3130254251b6df96ec2f",
+    "hash_source": "https://www.python.org/ftp/python/3.13.17/windows-3.13.17.json",
+    "urls": [
+      {"name": "Python官方", "url": "https://www.python.org/ftp/python/3.13.17/python-3.13.17-amd64.zip"},
+      {"name": "清华镜像", "url": "https://mirrors.tuna.tsinghua.edu.cn/python/3.13.17/python-3.13.17-amd64.zip"},
+      {"name": "北外镜像", "url": "https://mirrors.bfsu.edu.cn/python/3.13.17/python-3.13.17-amd64.zip"}
+    ]
+  },
+  "pip": {
+    "version": "26.2.2",
+    "filename": "pip-26.2.2-py3-none-any.whl",
+    "bytes": 1819850,
+    "sha256": "fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70",
+    "hash_source": "https://pypi.org/pypi/pip/26.2.2/json",
+    "urls": [
+      {"name": "PyPI官方", "url": "https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl"},
+      {"name": "清华镜像", "url": "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl"},
+      {"name": "阿里镜像", "url": "https://mirrors.aliyun.com/pypi/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl"}
+    ]
+  },
+  "pip_indexes": [
+    {"name": "PyPI官方", "url": "https://pypi.org/simple"},
+    {"name": "清华镜像", "url": "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"},
+    {"name": "阿里镜像", "url": "https://mirrors.aliyun.com/pypi/simple"}
+  ],
+  "libreoffice": {
+    "version": "26.2.6",
+    "filename": "LibreOffice_26.2.6_Win_x86-64.msi",
+    "bytes": 373252096,
+    "sha256": "f9877032fd908beb9c0ddf06df4af5c2e85f419c42e14876c4cce5aae5fb2660",
+    "hash_source": "https://download.documentfoundation.org/libreoffice/stable/26.2.6/win/x86_64/LibreOffice_26.2.6_Win_x86-64.msi.mirrorlist",
+    "urls": [
+      {"name": "LibreOffice官方", "url": "https://download.documentfoundation.org/libreoffice/stable/26.2.6/win/x86_64/LibreOffice_26.2.6_Win_x86-64.msi"},
+      {"name": "清华镜像", "url": "https://mirrors.tuna.tsinghua.edu.cn/libreoffice/libreoffice/stable/26.2.6/win/x86_64/LibreOffice_26.2.6_Win_x86-64.msi"},
+      {"name": "北外镜像", "url": "https://mirrors.bfsu.edu.cn/libreoffice/libreoffice/stable/26.2.6/win/x86_64/LibreOffice_26.2.6_Win_x86-64.msi"}
+    ]
+  }
+}

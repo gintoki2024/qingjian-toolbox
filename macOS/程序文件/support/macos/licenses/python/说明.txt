@@ -1,0 +1,35 @@
+Python 便携运行时的补充许可材料
+
+对应运行时：Astral python-build-standalone，CPython 3.13.18，发布 20261026。
+同时适用 Apple Silicon 和 Intel Mac；两份运行时归档的固定大小与 SHA256
+列于 manifest.json，并与 macos-runtime-sources.json 一致。
+
+为什么需要本目录
+install_only_stripped 归档保留的 lib/python3.13/LICENSE.txt 是 Python 主许可，
+不是 OpenSSL、libffi、bzip2 等嵌入依赖的总许可。上游 full 归档另外提供
+python/licenses 目录，相关路径写在该归档的 PYTHON.json 中。
+
+本目录的14份 LICENSE.*.txt 均逐字取自同一发布对应的官方固定提交：
+fa506e0858ac9f2cc5b289c137b888a2aa24d1ee。
+保留的14份文件恰好覆盖两架构 PYTHON.json 引用的全部许可路径。
+两个 runtime-metadata 文件只是从官方 PYTHON.json 提取的许可及链接关系，
+不是对其他版本 Python 的通用声明；来源、原始元数据 SHA256 及取得方式
+均在 manifest.json 中记录。
+
+本次只读取两份 full 归档各256KB的 HTTPS 范围数据，取得其完整的首成员
+PYTHON.json；没有下载 full 归档，没有声称完成 full 归档的整档 SHA256。
+许可原文通过官方固定提交的 HTTPS 小文件单独取得并逐文件记录 SHA256。
+
+CPython-3.13.18-runtime-LICENSE.txt 另取自实际 install_only_stripped
+运行时中的 lib/python3.13/LICENSE.txt，两架构内容一致。它保留当前 Python
+许可；LICENSE.cpython.txt 则是构建项目在该提交中保留的原始历史副本，
+两者同时保存，互不替换。
+
+macOS 的 libz、libedit、ncurses、panel 等系统动态库不会被本工具复制。
+官方元数据仍引用相应许可，因此这些小型告知一并保留；这不代表本包静态
+嵌入了系统 libedit、ncurses 或 zlib-ng。Berkeley DB 等仅其他平台适用的
+许可未混入本目录。标准库、pip及新增Python依赖各自原有的许可继续保留。
+
+来源：
+https://github.com/astral-sh/python-build-standalone/releases/tag/20261026
+https://github.com/astral-sh/python-build-standalone/blob/fa506e0858ac9f2cc5b289c137b888a2aa24d1ee/docs/distributions.rst

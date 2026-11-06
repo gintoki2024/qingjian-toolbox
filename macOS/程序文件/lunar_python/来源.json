@@ -1,0 +1,13 @@
+{
+  "name": "lunar_python",
+  "version": "1.4.8",
+  "license": "MIT",
+  "upstream": "https://github.com/6tail/lunar-python",
+  "release_metadata": "https://pypi.org/pypi/lunar_python/1.4.8/json",
+  "url": "https://files.pythonhosted.org/packages/59/45/5154c95ae7feaab7ca508e71c3288692c09952dfe33b03b7c2f18a32e2cd/lunar_python-1.4.8.tar.gz",
+  "bytes": 105862,
+  "sha256": "3aa11cc73c25e70ddf0ba5bdac7398c03acc9491a3aa512a91c9642973b669d6",
+  "changed_upstream_code": false,
+  "purpose": "离线公历/农历/节气计算，不联网，不显示黄历宜忌",
+  "files": 34
+}

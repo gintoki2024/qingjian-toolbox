@@ -1,0 +1,71 @@
+name: Build and verify Qingjian macOS
+
+# Template: put this file in .github/workflows only when cloud building is
+# explicitly requested. No push/pull_request trigger and no automatic release.
+on:
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: Target Mac architecture (build Apple Silicon first)
+        required: true
+        default: arm64
+        type: choice
+        options:
+          - arm64
+          - x86_64
+          - both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qingjian-macos-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: macOS ${{ matrix.target.arch }}
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        target: ${{ fromJSON(inputs.architecture == 'both' && '[{"arch":"arm64","runner":"macos-15"},{"arch":"x86_64","runner":"macos-15-intel"}]' || inputs.architecture == 'x86_64' && '[{"arch":"x86_64","runner":"macos-15-intel"}]' || '[{"arch":"arm64","runner":"macos-15"}]') }}
+    runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: macOS/程序文件
+        shell: bash
+    steps:
+      - name: Check out the selected source revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, verified 2026-11-05
+      - name: Check architecture and macOS
+        run: |
+          test "$(uname -m)" = '${{ matrix.target.arch }}'
+          sw_vers
+          python3 --version
+      - name: Prepare, build, test offline, and package
+        env:
+          QINGJIAN_CI: '1'
+        run: |
+          python3 macos_build/ci_build.py \
+            --home "$RUNNER_TEMP/qingjian-shared-runtime-${{ matrix.target.arch }}" \
+            --output "$RUNNER_TEMP/qingjian-macos-${{ matrix.target.arch }}"
+      - name: Upload the verified complete package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, verified 2026-11-05
+        with:
+          name: Qingjian-macOS-${{ matrix.target.arch }}-Full
+          path: ${{ runner.temp }}/qingjian-macos-${{ matrix.target.arch }}/release/*
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+      - name: Preserve diagnostics and screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, verified 2026-11-05
+        with:
+          name: Qingjian-macOS-${{ matrix.target.arch }}-Acceptance
+          path: |
+            ${{ runner.temp }}/qingjian-macos-${{ matrix.target.arch }}/acceptance/
+            ${{ runner.temp }}/qingjian-shared-runtime-${{ matrix.target.arch }}/logs/
+          if-no-files-found: ignore
+          retention-days: 3

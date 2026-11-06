@@ -1,0 +1,12 @@
+青简工具箱 Mac 版第三方组件
+
+本版本的运行平台为 macOS，不沿用旧 Windows 完整包的实际安装版本清单。
+requirements.txt 表示允许的依赖范围；源码中的 requirements-lock.txt 为历史 Windows 参考文件，不能用来宣称 Mac 已安装这些版本。
+
+完整运行包在构建时由包内 Python 的 importlib.metadata 生成“第三方组件清单-Mac.json”，记录 Python 版本、实际包含的直接及间接模块、许可标识和相对许可路径，以及本架构的原生组件来源和版本。实际内容以该清单和对应许可文件为准。
+Python 许可位于 Python/lib/python主版本.次版本/LICENSE.txt。各 Python 模块的许可证随其安装文件保留在 Python/lib/python主版本.次版本/site-packages 内，清单中的路径均相对 Python 文件夹。
+
+轻量源码包首次使用时会在所选解释器环境补齐依赖，实际版本以该环境为准，不宣称 Windows 历史锁定文件就是 Mac 的安装清单。
+
+原生转换组件的固定下载版本、大小、SHA256 和来源分别见 macos-native-sources.json、macos-runtime-sources.json。许可及适用来源说明保留在 support/macos、support/OFD 及完整包 native/各组件/licenses 内；OFD 的 Java 依赖为跨平台 JAR。完整包另附 Ghostscript 对应源码归档于 native/Ghostscript/source 内。
+首次下载和复制后均校验，实际原生转换还须在对应架构 Mac 验收。完整包内置组件，不执行全局安装，不更改系统 PATH 或安全策略。

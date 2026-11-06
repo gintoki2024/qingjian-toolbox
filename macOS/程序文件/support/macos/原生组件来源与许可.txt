@@ -1,0 +1,69 @@
+青简工具箱 macOS 原生组件来源与许可
+核验日期：2026-11-05
+
+轻量源码包只包含清单、准备代码和许可材料，不捆绑下列大型二进制。
+首次准备将缺失组件解压到用户选择的共享位置；以后按固定文件校验复用。
+不运行系统安装器、不使用 sudo、不安装 Homebrew、不修改系统 PATH。
+
+一、LibreOffice 26.8.2
+发布者：The Document Foundation。
+官方发布与 SHA256：
+https://www.libreoffice.org/download/
+https://download.documentfoundation.org/libreoffice/stable/26.8.2/mac/aarch64/LibreOffice_26.8.2_MacOS_aarch64.dmg.mirrorlist
+https://download.documentfoundation.org/libreoffice/stable/26.8.2/mac/x86_64/LibreOffice_26.8.2_MacOS_x86-64.dmg.mirrorlist
+许可：MPL 2.0，部分第三方代码另有许可；完整保留 LibreOffice.app 内的许可与告知。
+源码获取：https://www.libreoffice.org/about-us/source-code/
+下载使用官方列出的清华、南京镜像，DMG 全文件大小及 SHA256 必须通过。
+镜像只读挂载后复制 LibreOffice.app，不把 LibreOffice 安装到 /Applications。
+
+二、7-Zip 26.05 macOS
+发布者：Igor Pavlov / ip7z。
+官方：https://7-zip.org/download.html
+https://github.com/ip7z/7zip/releases/tag/26.05
+使用官方通用 arm64/x86_64 7zz，保留同包 License.txt、readme.txt、History.txt。
+许可：LGPL，部分代码 BSD，涉及 unRAR 的限制详见原始 License.txt。
+对应源码：https://github.com/ip7z/7zip/tree/26.05
+官方和南京大学发布镜像完整下载的 SHA256 已比对一致。
+
+三、Eclipse Temurin JRE 21.0.13+9
+发布者：Eclipse Adoptium。
+https://github.com/adoptium/temurin21-binaries/releases/tag/jdk-21.0.13%2B9
+分别使用原生 aarch64 或 x64 macOS tar.gz，不使用 Windows Java。
+许可：GPL v2 with Classpath Exception 及原始第三方告知；保留运行时 legal 目录。
+源码与构建：https://github.com/adoptium/temurin21-binaries/releases/tag/jdk-21.0.13%2B9
+https://github.com/adoptium/temurin-build
+官方与 GitHub 下载加速备用完整下载的 SHA256 已比对一致。
+加速服务不是中国大陆静态镜像，能否使用取决于实际网络；不关闭 TLS 验证。
+
+四、MacTeX Ghostscript 10.07.0
+Ghostscript 发布者：Artifex Software；macOS 通用构建提供者：MacTeX / Richard Koch。
+https://tug.org/mactex/currentpackages-tug.html
+https://tug.org/mactex/morepackages.html
+https://pages.uoregon.edu/koch/
+官方 CTAN 发布：
+https://mirror.ctan.org/systems/mac/mactex/mactex-ghostscript-10.07.0-20260324.pkg
+清华与南京 CTAN 镜像完整下载的 SHA256 一致；SHA512 与 TUG 官方发布记录一致。
+许可：GNU Affero General Public License v3，见同目录 Ghostscript-COPYING。
+仅从 pkg 数据中提取 gs-noX11 及 share/ghostscript 资源，原程序二进制不改动。
+gs-noX11 重命名为 bin/gs；资源通过进程内 GS_LIB 指向私有目录。
+不解包或运行 preinstall/postinstall 等安装脚本，不安装 X11。
+核验 Mach-O 的两个架构仅链接系统 libcups、libSystem、libiconv、libc++。
+对应上游源码：
+https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/tag/gs10070
+https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs10070/ghostscript-10.07.0.tar.xz
+完整包构建前须明确调用 ensure_redistribution_materials，下载并校验对应上游源码，
+将原始归档置于 Ghostscript/source，随二进制一起分发。普通轻量源码启动不下载源码归档。
+本工具的私有解包和重定位方法即 startup_macos_native.py，可直接审阅和重建。
+上游 macOS 编译与打包的补充信息以 MacTeX 构建提供者的发布说明为准。
+
+五、OFD Java 桥与依赖
+本工具的 bridge.jar 及可重建 Java 源码位于 support/OFD；桥不含平台原生代码。
+37 个原始 JAR 使用现有固定版本/大小/SHA256，复用原有 Maven Central 与阿里云备用。
+依赖来源、许可证和对应源代码获取地址保留在 support/OFD 的 library-origins.json、
+source-origins.json 与 licenses 目录，不移除第三方作者、商标和许可名称。
+
+验证边界
+已完成下载来源、固定校验值、归档安全解包、CPU 架构和动态链接依赖的静态核验。
+当前开发机为 Windows。macOS 的 DMG 挂载、系统签名判断、程序实际转换与中文排版，
+须在对应架构 Mac 实测后才可宣称通过；不能用 Windows 单元测试代替实机验收。
+不自动取消隔离属性、不修改 Gatekeeper、不伪装开发者签名。

@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-11-05",
+  "minimum_macos": "14.4",
+  "python": {
+    "arm64": {
+      "version": "3.13.18",
+      "filename": "cpython-3.13.18+20261026-aarch64-apple-darwin-install_only_stripped.tar.gz",
+      "bytes": 25265774,
+      "sha256": "8392b6ea51d94391befb2c31ebe75463f045d0b69dfcf5e1bb3234e1f5fa3405",
+      "hash_source": "https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/20261026",
+      "urls": [
+        {
+          "name": "南京大学镜像",
+          "url": "https://mirrors.nju.edu.cn/github-release/astral-sh/python-build-standalone/20261026/cpython-3.13.18%2B20261026-aarch64-apple-darwin-install_only_stripped.tar.gz"
+        },
+        {
+          "name": "Astral官方",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.13.18%2B20261026-aarch64-apple-darwin-install_only_stripped.tar.gz"
+        }
+      ]
+    },
+    "x86_64": {
+      "version": "3.13.18",
+      "filename": "cpython-3.13.18+20261026-x86_64-apple-darwin-install_only_stripped.tar.gz",
+      "bytes": 25055263,
+      "sha256": "7412c19d896c99431b74a18a5643e110449a7f9590fbab179c3e5ab27b9aa9e3",
+      "hash_source": "https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/20261026",
+      "urls": [
+        {
+          "name": "南京大学镜像",
+          "url": "https://mirrors.nju.edu.cn/github-release/astral-sh/python-build-standalone/20261026/cpython-3.13.18%2B20261026-x86_64-apple-darwin-install_only_stripped.tar.gz"
+        },
+        {
+          "name": "Astral官方",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.13.18%2B20261026-x86_64-apple-darwin-install_only_stripped.tar.gz"
+        }
+      ]
+    }
+  },
+  "pip": {
+    "version": "26.2.2",
+    "filename": "pip-26.2.2-py3-none-any.whl",
+    "bytes": 1819850,
+    "sha256": "fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70",
+    "hash_source": "https://pypi.org/pypi/pip/26.2.2/json",
+    "urls": [
+      {
+        "name": "PyPI官方",
+        "url": "https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl"
+      },
+      {
+        "name": "清华镜像",
+        "url": "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl"
+      },
+      {
+        "name": "阿里镜像",
+        "url": "https://mirrors.aliyun.com/pypi/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl"
+      }
+    ]
+  },
+  "pip_indexes": [
+    {
+      "name": "阿里镜像",
+      "url": "https://mirrors.aliyun.com/pypi/simple"
+    },
+    {
+      "name": "清华镜像",
+      "url": "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+    },
+    {
+      "name": "PyPI官方",
+      "url": "https://pypi.org/simple"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "purpose": "为只提供源码发行包的纯Python依赖提供已核验的小型wheel，终端用户无需安装编译器。",
+  "artifacts": [
+    {
+      "distribution": "red-black-tree-mod",
+      "version": "1.22",
+      "filename": "red_black_tree_mod-1.22-py3-none-any.whl",
+      "bytes": 19325,
+      "sha256": "a3760cbee3d4fb84d485a44b8434b575acba0ad01f092885fc765170fd618368",
+      "license": "MIT",
+      "license_path_in_wheel": "red_black_tree_mod-1.22.dist-info/licenses/COPYING",
+      "upstream": {
+        "url": "https://files.pythonhosted.org/packages/48/75/bfa342a2ebfc9623b701f1c6995b9906fd6dd2cedf6bce777d09e23303ac/red-black-tree-mod-1.22.tar.gz",
+        "sha256": "38e3652903a2bf96379c27c2082ca0b7b905158662dd7ef0c97f4fd93a9aa908",
+        "bytes": 34173
+      },
+      "build": {
+        "python": "3.12.14",
+        "setuptools": "84.2.1",
+        "source_date_epoch": 1703548800,
+        "script": "launcher/rebuild_bootstrap_wheel.py"
+      },
+      "original_modules_unmodified": true
+    },
+    {
+      "distribution": "win-unicode-console",
+      "version": "0.5",
+      "filename": "win_unicode_console-0.5-py3-none-any.whl",
+      "bytes": 21120,
+      "sha256": "2da0b64be6586e92344e33316e39c3fe61a7d03f2ed3319e4d2721d950e70030",
+      "license": "MIT",
+      "license_path_in_wheel": "win_unicode_console-0.5.dist-info/licenses/LICENSE",
+      "upstream": {
+        "url": "https://files.pythonhosted.org/packages/89/8d/7aad74930380c8972ab282304a2ff45f3d4927108bb6693cabcc9fc6a099/win_unicode_console-0.5.zip",
+        "sha256": "d4142d4d56d46f449d6f00536a73625a871cba040f0bc1a2e305a04578f07d1e",
+        "bytes": 31420
+      },
+      "license_source": {
+        "url": "https://raw.githubusercontent.com/Drekin/win-unicode-console/6beb5df5219ac1e5495b415d286e634a27720b2e/LICENSE",
+        "sha256": "575eb041efcedf791415a04171f18f48b0303611d2fe85ef8c8da3025d905647",
+        "bytes": 1072
+      },
+      "build": {
+        "python": "3.12.14",
+        "setuptools": "84.2.1",
+        "source_date_epoch": 1703548800,
+        "script": "launcher/rebuild_bootstrap_unicode.py"
+      },
+      "original_modules_unmodified": true,
+      "packaging_note": "官方源码发行包遗漏LICENSE；从对应版本固定提交补入MIT文本，运行代码保持不变。"
+    }
+  ]
+}

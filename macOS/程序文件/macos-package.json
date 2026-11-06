@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "mode": "source",
+  "version": "0.12.0",
+  "platform": "macos",
+  "architectures": [
+    "arm64",
+    "x86_64"
+  ],
+  "minimum_macos": "14.4"
+}

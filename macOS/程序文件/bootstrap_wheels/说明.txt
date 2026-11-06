@@ -1,0 +1,5 @@
+轻量源码启动补充依赖
+
+这两个纯Python依赖在上游只有源码发行包。为避免普通用户首次运行时安装编译器或构建工具，本项目将官方源码打成py3-none-any wheel，共40445字节。启动器逐个核对大小及SHA256后才将对应文件提供给pip，依旧只安装缺少或版本不兼容的组件，不扫描本目录的其他文件。
+
+red-black-tree-mod 1.22、win-unicode-console 0.5均为MIT许可，原Python模块字节不变，许可文本在wheel中。后者的源码归档遗漏许可证，已从同版本固定提交补入。完整来源、校验值及构建工具版本见程序文件/ bootstrap-wheels.json。重建脚本位于launcher/rebuild_bootstrap_wheel.py和launcher/rebuild_bootstrap_unicode.py；开发者应将--source、--output及后者--license指定到包外的独立工作目录。重建脚本不会在普通用户启动时执行。
