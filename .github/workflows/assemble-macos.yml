@@ -1,0 +1,105 @@
+name: Assemble verified Mac draft assets
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        required: true
+        type: string
+      build_commit:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
+      source_sha256:
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: qingjian-mac-draft-${{ inputs.release_tag }}
+  cancel-in-progress: false
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BUILD_RUN: ${{ inputs.build_run_id }}
+      BUILD_COMMIT: ${{ inputs.build_commit }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      SOURCE_SHA: ${{ inputs.source_sha256 }}
+    steps:
+      - name: Verify immutable build and upload assets to an existing draft
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re, subprocess, tempfile, zipfile
+          repo, run_id, commit, tag, source_sha = (os.environ[k] for k in
+              ('GH_REPO', 'BUILD_RUN', 'BUILD_COMMIT', 'RELEASE_TAG', 'SOURCE_SHA'))
+          assert repo == 'gintoki2024/qingjian-toolbox'
+          assert run_id.isdecimal() and re.fullmatch(r'[0-9a-f]{40}', commit)
+          version_match = re.fullmatch(r'v(\d+\.\d+\.\d+)-macOS', tag)
+          assert version_match and re.fullmatch(r'[0-9a-f]{64}', source_sha)
+          version = version_match.group(1)
+          def gh(*args):
+              return subprocess.run(['gh', *args], check=True, text=True, capture_output=True).stdout
+          def api(path):
+              return json.loads(gh('api', 'repos/' + repo + '/' + path))
+          run = api('actions/runs/' + run_id)
+          assert run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['head_sha'] == commit and run['event'] == 'workflow_dispatch'
+          assert run['path'] == '.github/workflows/build-macos.yml'
+          assert run['repository']['full_name'] == repo
+          release = api('releases/tags/' + tag)
+          assert release['draft'] and release['prerelease'], 'Only an existing Mac draft can receive files'
+          digest = lambda p: hashlib.file_digest(p.open('rb'), 'sha256').hexdigest()
+          with tempfile.TemporaryDirectory(prefix='qingjian-mac-assets-') as temporary:
+              root = pathlib.Path(temporary)
+              source_name = f'QingjianToolbox-v{version}-macOS-Source.zip'
+              gh('release', 'download', tag, '--repo', repo, '--pattern', source_name, '--dir', str(root))
+              source = root / source_name
+              assert digest(source) == source_sha
+              files = [{'filename': source_name, 'bytes': source.stat().st_size, 'sha256': source_sha, 'mode': 'source'}]
+              manifest = {'version': version, 'build_run_id': int(run_id), 'build_commit': commit,
+                          'build_url': run['html_url'], 'files': files, 'platforms': {}}
+              uploads = []
+              with zipfile.ZipFile(source) as source_zip:
+                  source_code = {n: source_zip.read(n) for n in source_zip.namelist()
+                                 if n.startswith('程序文件/') and (n.endswith('.py') or n in {
+                                     '程序文件/requirements.txt', '程序文件/macos-runtime-sources.json',
+                                     '程序文件/macos-native-sources.json', '程序文件/bootstrap-wheels.json'})}
+              for arch in ('arm64', 'x86_64'):
+                  directory = root / arch
+                  gh('run', 'download', run_id, '--repo', repo, '--name', f'Qingjian-macOS-{arch}-Full', '--dir', str(directory))
+                  name = f'QingjianToolbox-v{version}-macOS-{arch}-Full.zip'
+                  archive = directory / name
+                  expected = (directory / (name + '.sha256')).read_text().split()[0]
+                  actual = digest(archive)
+                  assert actual == expected
+                  with zipfile.ZipFile(archive) as full_zip:
+                      marker = json.loads(full_zip.read('程序文件/macos-package.json'))
+                      validation = json.loads(full_zip.read('程序文件/macos-build-validation.json'))
+                      inventory = json.loads(full_zip.read('程序文件/macos-build-inventory.json'))
+                      assert marker['mode'] == 'offline' and marker['architecture'] == arch and marker['version'] == version
+                      assert validation['passed'] and validation['architecture'] == arch and validation['platform'] == 'darwin'
+                      assert all(row['returncode'] == 0 for row in validation['checks'])
+                      assert validation['business_checks'] == 57 and validation['native_business_checks'] == 9
+                      assert inventory['external_absolute_libraries'] == 0
+                      assert all(full_zip.read(n) == data for n, data in source_code.items()), 'Source code differs from the tested bundle'
+                  files.append({'filename': name, 'bytes': archive.stat().st_size, 'sha256': actual, 'mode': 'offline', 'architecture': arch})
+                  manifest['platforms'][arch] = {'source_code_matches': True, 'source_files_compared': len(source_code),
+                                                'business_checks': 57, 'native_conversions': 9,
+                                                'macho_files': inventory['macho_files'], 'python_packages': inventory['python_packages']}
+                  uploads.append(archive)
+              checksums = root / f'SHA256SUMS-macOS-v{version}.txt'
+              checksums.write_text(''.join(row['sha256'] + '  ' + row['filename'] + '\n' for row in files), encoding='utf-8')
+              summary = root / f'QingjianToolbox-v{version}-macOS-Release.json'
+              summary.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+              assert api('releases/tags/' + tag)['draft'], 'Draft was published during assembly'
+              gh('release', 'upload', tag, '--repo', repo, *(str(p) for p in uploads + [checksums, summary]))
+              print(json.dumps(manifest, ensure_ascii=False, indent=2))
+              print('Assets uploaded to draft only; publication remains a separate step.')
+          PY
