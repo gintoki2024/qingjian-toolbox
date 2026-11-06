@@ -12,6 +12,54 @@ import pytest
 import bootstrap_macos as mac
 
 
+@pytest.mark.parametrize('offline', [False, True])
+def test_full_probes_isolated_but_source_reuses_normal_python(tmp_path, offline):
+    python = tmp_path / 'Python/bin/python3'
+    who = {'supported': True, 'python': str(python), 'prefix': str(tmp_path / 'Python')}
+    with patch.object(mac, 'offline_package', return_value=offline), \
+         patch.object(mac, 'identity', return_value=who) as identify, \
+         patch.object(mac.common, 'probe_python', return_value={'ready': True}) as probe:
+        assert mac.checked_python(python, tmp_path)['ready']
+    identify.assert_called_once_with(python, isolated=offline)
+    probe.assert_called_once_with(python, tmp_path, isolated=offline)
+
+
+@pytest.mark.parametrize('external', ['executable', 'identity', 'prefix'])
+def test_full_rejects_external_python_before_dependency_probe(tmp_path, external):
+    python = tmp_path / 'Python/bin/python3'
+    who = {'supported': True, 'python': str(python), 'prefix': str(tmp_path / 'Python')}
+    if external == 'executable':
+        python = tmp_path / 'other/bin/python3'
+    else:
+        who['python' if external == 'identity' else 'prefix'] = str(tmp_path / 'other')
+    with patch.object(mac, 'offline_package', return_value=True), \
+         patch.object(mac, 'identity', return_value=who), \
+         patch.object(mac.common, 'requirements', return_value=[{'name': 'Pillow'}]), \
+         patch.object(mac.common, 'probe_python') as probe:
+        result = mac.checked_python(python, tmp_path)
+    assert not result['ready'] and not result['supported']
+    assert result['missing'] == ['Pillow']
+    probe.assert_not_called()
+
+
+def test_isolated_probe_disables_real_user_site_without_installing(tmp_path):
+    (tmp_path / 'requirements.txt').write_text('tomli>=2,<3\n', encoding='utf-8')
+    with patch.object(mac.common, 'install_missing_packages', side_effect=AssertionError('installer called')):
+        result = mac.common.probe_python(sys.executable, tmp_path, isolated=True)
+    assert result['supported']
+    assert result['user_enabled'] is False
+    assert len(result['packages']) == 1
+
+
+@pytest.mark.parametrize('isolated', [False, True])
+def test_identity_process_isolation_policy(isolated):
+    response = {'platform': 'darwin', 'architecture': mac.architecture(), 'version': [3, 13, 18]}
+    with patch.object(mac.subprocess, 'run', return_value=Mock(returncode=0, stdout=json.dumps(response))) as run:
+        assert mac.identity(sys.executable, isolated=isolated)['supported']
+    flags = run.call_args.args[0][1:4]
+    assert flags == (['-I', '-X', 'utf8'] if isolated else ['-E', '-X', 'utf8'])
+
+
 def archive(tmp_path, members):
     path = tmp_path / 'python.tar.gz'
     with tarfile.open(path, 'w:gz') as tar:

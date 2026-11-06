@@ -7,6 +7,8 @@ state cannot leak between tests. All sample data is generated and fictional.
 from __future__ import annotations
 
 import argparse
+import importlib
+import importlib.metadata
 import json
 import os
 from pathlib import Path
@@ -37,18 +39,51 @@ def set_native(project: Path) -> dict:
     return native
 
 
+def _dependency_isolation(project: Path, runtime: Path) -> list[dict]:
+    """Inspect every direct dependency using the source startup's own mapping.
+
+    Package metadata and the imported modules are checked independently: a
+    local dist-info folder must not conceal an import from a user/system site.
+    Returned paths are relative to the packaged interpreter for portable QA.
+    """
+    import bootstrap
+    rows = []
+    for requirement in bootstrap.requirements(project):
+        name = requirement["name"]
+        modules = bootstrap.MODULES[name.lower().replace("_", "-")]
+        distribution = importlib.metadata.distribution(name)
+        root = Path(distribution.locate_file("")).resolve()
+        assert root.is_relative_to(runtime), f"{name} distribution root is outside packaged Python: {root}"
+        # Pip installs ordinary PathDistribution metadata into dist-info/egg-info.
+        # Check the selected distribution's actual metadata location, not just
+        # a candidate metadata file discovered separately on sys.path.
+        metadata_value = getattr(distribution, "_path", None)
+        assert metadata_value is not None, f"{name} distribution has no inspectable metadata location"
+        metadata = Path(metadata_value).resolve()
+        assert metadata.is_relative_to(runtime), f"{name} metadata is outside packaged Python: {metadata}"
+        assert metadata.is_dir(), f"{name} metadata directory is missing: {metadata}"
+        imported = []
+        for module_name in modules:
+            module = importlib.import_module(module_name)
+            filename = getattr(module, "__file__", None)
+            assert filename, f"{module_name} has no inspectable module file"
+            path = Path(filename).resolve()
+            assert path.is_relative_to(runtime), f"{module_name} is outside packaged Python: {path}"
+            assert path.is_file(), f"{module_name} module file is missing: {path}"
+            imported.append({"name": module_name, "path": path.relative_to(runtime).as_posix()})
+        rows.append({"name": name, "version": distribution.version,
+                     "distribution_root": root.relative_to(runtime).as_posix(),
+                     "metadata_directory": metadata.relative_to(runtime).as_posix(), "modules": imported})
+    return rows
+
+
 def probe(project: Path, report: Path) -> None:
     deny_network()
     native = set_native(project)
-    import docx
-    import pypdfium2
-    import pptx
-    from PySide6 import QtCore
     runtime = (project / "Python").resolve()
     assert sys.flags.isolated and sys.flags.no_user_site
     assert Path(sys.prefix).resolve() == runtime
-    for module in (docx, pypdfium2, pptx, QtCore):
-        assert Path(module.__file__).resolve().is_relative_to(runtime), module.__file__
+    dependencies = _dependency_isolation(project, runtime)
     assert all(Path(root).resolve().is_relative_to(project) for root in native["components"].values())
     from qingjian.core.conversion import find_libreoffice
     from qingjian.core.format_media import engine
@@ -58,7 +93,10 @@ def probe(project: Path, report: Path) -> None:
     assert all(Path(path).resolve().is_relative_to(project) for path in engines)
     report.write_text(json.dumps({"passed": True, "platform": sys.platform, "architecture": platform.machine(),
                                   "isolated": True, "user_site_disabled": True, "external_environment": False,
-                                  "network_calls_denied": True}, ensure_ascii=False, indent=2), encoding="utf-8")
+                                  "network_calls_denied": True, "direct_dependency_count": len(dependencies),
+                                  "direct_dependency_names": [row["name"] for row in dependencies],
+                                  "imported_module_count": sum(len(row["modules"]) for row in dependencies),
+                                  "dependencies": dependencies}, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def native_ui(project: Path, report: Path, *, api_preflight: bool = False) -> None:

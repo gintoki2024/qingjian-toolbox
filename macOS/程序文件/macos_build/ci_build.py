@@ -37,7 +37,8 @@ def focused_regression(python: Path, home: Path, output: Path) -> None:
         raise RuntimeError("Mac 验收依赖安装未完成：" + "；".join(failures))
     destination = output / "acceptance" / platform.machine()
     destination.mkdir(parents=True, exist_ok=True)
-    for name in ("test_macos_bootstrap", "test_macos_native", "test_macos_core", "test_macos_packaging"):
+    for name in ("test_macos_bootstrap", "test_macos_native", "test_macos_core", "test_macos_packaging",
+                 "test_macos_dependency_isolation"):
         environment = os.environ.copy()
         environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
         subprocess.run([str(python), "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/" + name + ".py",

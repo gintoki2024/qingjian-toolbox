@@ -125,9 +125,10 @@ def load_manifest(project=PROJECT):
     return row
 
 
-def identity(python):
+def identity(python, *, isolated=False):
     try:
-        process = subprocess.run([str(python), *common.PYTHON_FLAGS, "-c", IDENTITY_CODE],
+        flags = ["-I", "-X", "utf8"] if isolated else common.PYTHON_FLAGS
+        process = subprocess.run([str(python), *flags, "-c", IDENTITY_CODE],
                                  capture_output=True, text=True, encoding="utf-8", errors="replace",
                                  env=common.child_environment(), timeout=30)
         value = json.loads(process.stdout.strip().splitlines()[-1]) if process.returncode == 0 else {}
@@ -227,17 +228,28 @@ def offline_package(project=PROJECT):
 def environment_stamp(project, python):
     value = hashlib.sha256(str(Path(project).resolve()).encode("utf-8"))
     value.update(str(Path(python).absolute()).encode("utf-8"))
-    for name in ("requirements.txt", "bootstrap_macos.py", "macos-runtime-sources.json",
+    for name in ("requirements.txt", "bootstrap.py", "bootstrap_macos.py", "macos-runtime-sources.json",
                  "startup_macos_native.py", "macos-native-sources.json", "bootstrap-wheels.json"):
         value.update((Path(project) / name).read_bytes())
     return value.hexdigest()
 
 
 def checked_python(python, project):
-    who = identity(python)
+    isolated = offline_package(project)
+    who = identity(python, isolated=isolated)
+    if isolated:
+        runtime = (Path(project) / "Python").resolve()
+        try:
+            owned = (Path(python).resolve().is_relative_to(runtime)
+                     and Path(who["python"]).resolve().is_relative_to(runtime)
+                     and Path(who["prefix"]).resolve() == runtime)
+        except (KeyError, OSError, ValueError):
+            owned = False
+        if not owned:
+            who = {**who, "supported": False, "error": "完整包只能使用包内 Python。"}
     if not who.get("supported"):
         return {"ready": False, "supported": False, "missing": [e["name"] for e in common.requirements(project)], "identity": who}
-    return {**common.probe_python(python, project), "identity": who}
+    return {**common.probe_python(python, project, isolated=isolated), "identity": who}
 
 
 def check_environment(project=PROJECT, python=None, home=None):

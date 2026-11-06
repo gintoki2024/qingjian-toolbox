@@ -269,10 +269,11 @@ def version_satisfies(value, spec):
     return True
 
 
-def probe_python(executable, project=PROJECT):
+def probe_python(executable, project=PROJECT, *, isolated=False):
     entries = requirements(project)
     try:
-        process = subprocess.run([str(executable), *PYTHON_FLAGS, "-c", PROBE_CODE, json.dumps(entries)],
+        flags = ["-I", "-X", "utf8"] if isolated else PYTHON_FLAGS
+        process = subprocess.run([str(executable), *flags, "-c", PROBE_CODE, json.dumps(entries)],
                                  capture_output=True, text=True, encoding="utf-8", errors="replace",
                                  env=child_environment(), timeout=90,
                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))

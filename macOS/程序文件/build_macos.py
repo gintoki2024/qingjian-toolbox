@@ -21,6 +21,8 @@ from package_macos import ROOT_ENTRIES, WINDOWS_SUFFIXES, macos_guide, source_co
 
 PROJECT = Path(__file__).resolve().parent
 MACHO_MAGICS = {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca", b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca"}
+DYLIB_LOAD_COMMANDS = {"LC_LOAD_DYLIB", "LC_LOAD_WEAK_DYLIB", "LC_REEXPORT_DYLIB",
+                       "LC_LAZY_LOAD_DYLIB", "LC_LOAD_UPWARD_DYLIB"}
 
 
 def architecture(value: str | None = None) -> str:
@@ -63,6 +65,37 @@ def verify_links(root: Path) -> int:
     return count
 
 
+def loaded_dylibs(load_commands: str) -> list[str]:
+    """Read dependency commands, excluding the library's own LC_ID_DYLIB.
+
+    otool -L also prints the install ID, which can legitimately be a bare
+    filename. Classifying the actual load command avoids exempting a genuine
+    dependency merely because it happens to share the library's own name.
+    """
+    result = []
+    awaiting_name = None
+    for raw in load_commands.splitlines():
+        line = raw.strip()
+        if line.startswith("Load command "):
+            if awaiting_name:
+                raise RuntimeError("Mach-O 动态库依赖命令缺少名称：" + awaiting_name)
+            awaiting_name = None
+        elif match := re.fullmatch(r"cmd (LC_[A-Z0-9_]+)", line):
+            if awaiting_name:
+                raise RuntimeError("Mach-O 动态库依赖命令缺少名称：" + awaiting_name)
+            command = match.group(1)
+            awaiting_name = command if command in DYLIB_LOAD_COMMANDS else None
+        elif awaiting_name and line.startswith("name "):
+            match = re.fullmatch(r"name (.+) \(offset \d+\)", line)
+            if not match:
+                raise RuntimeError("无法读取 Mach-O 动态库依赖名称：" + line)
+            result.append(match.group(1))
+            awaiting_name = None
+    if awaiting_name:
+        raise RuntimeError("Mach-O 动态库依赖命令缺少名称：" + awaiting_name)
+    return result
+
+
 def portable_binary_dependencies(root: Path, arch: str) -> dict:
     """Reject foreign architecture and undeclared absolute dylib dependencies.
 
@@ -81,12 +114,8 @@ def portable_binary_dependencies(root: Path, arch: str) -> dict:
         arches = run(["/usr/bin/lipo", "-archs", str(item)]).strip().split()
         if arch not in arches:
             raise RuntimeError("包含其他架构的原生文件：" + str(item.relative_to(root)) + " (" + " ".join(arches) + ")")
-        for line in run(["/usr/bin/otool", "-L", str(item)]).splitlines()[1:]:
-            dependency = line.strip().split(" (", 1)[0]
-            # The first dylib entry can be its own install name.
+        for dependency in loaded_dylibs(run(["/usr/bin/otool", "-arch", arch, "-l", str(item)])):
             if dependency.startswith(("/usr/lib/", "/System/Library/", "@rpath/", "@loader_path/", "@executable_path/")):
-                continue
-            if dependency == str(item):
                 continue
             raise RuntimeError("依赖包外的动态库，无法离线分发：" + str(item.relative_to(root)) + " -> " + dependency)
         checked += 1

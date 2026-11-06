@@ -211,10 +211,19 @@ def test_component_inventory_uses_packaged_interpreter_and_actual_metadata(tmp_p
     assert "Windows" in (program / "第三方组件说明.txt").read_text(encoding="utf-8")
 
 
+def otool_load_commands(*entries):
+    rows = ["/portable/libexample.dylib:"]
+    for index, (command, name) in enumerate(entries):
+        rows.extend([f"Load command {index}", "          cmd " + command, "      cmdsize 64",
+                     "         name " + name + " (offset 24)",
+                     "   time stamp 1 Thu Jan  1 00:00:01 1970", "      current version 1.0.0"])
+    return "\n".join(rows) + "\n"
+
+
 def test_dynamic_library_scan_rejects_external_absolute_path(tmp_path, monkeypatch):
     binary = tmp_path / "python3"
     binary.write_bytes(b"\xcf\xfa\xed\xfe" + b"x" * 20)
-    monkeypatch.setattr(build_macos, "run", lambda cmd: "arm64\n" if "lipo" in cmd[0] else str(binary) + ":\n /opt/homebrew/lib/libbad.dylib (compatibility version 1.0.0)\n")
+    monkeypatch.setattr(build_macos, "run", lambda cmd: "arm64\n" if "lipo" in cmd[0] else otool_load_commands(("LC_LOAD_DYLIB", "/opt/homebrew/lib/libbad.dylib")))
     with pytest.raises(RuntimeError, match="包外"):
         build_macos.portable_binary_dependencies(tmp_path, "arm64")
 
@@ -222,7 +231,7 @@ def test_dynamic_library_scan_rejects_external_absolute_path(tmp_path, monkeypat
 def test_dynamic_library_scan_accepts_system_and_relative_dependencies(tmp_path, monkeypatch):
     binary = tmp_path / "python3"
     binary.write_bytes(b"\xcf\xfa\xed\xfe" + b"x" * 20)
-    monkeypatch.setattr(build_macos, "run", lambda cmd: "arm64 x86_64\n" if "lipo" in cmd[0] else str(binary) + ":\n @rpath/libpython.dylib (compatibility version 1.0.0)\n /usr/lib/libSystem.B.dylib (compatibility version 1.0.0)\n")
+    monkeypatch.setattr(build_macos, "run", lambda cmd: "arm64 x86_64\n" if "lipo" in cmd[0] else otool_load_commands(("LC_LOAD_DYLIB", "@rpath/libpython.dylib"), ("LC_LOAD_DYLIB", "/usr/lib/libSystem.B.dylib")))
     assert build_macos.portable_binary_dependencies(tmp_path, "arm64")["macho_files"] == 1
 
 
@@ -232,6 +241,62 @@ def test_dynamic_library_scan_rejects_wrong_architecture(tmp_path, monkeypatch):
     monkeypatch.setattr(build_macos, "run", lambda command: "x86_64\n")
     with pytest.raises(RuntimeError, match="其他架构"):
         build_macos.portable_binary_dependencies(tmp_path, "arm64")
+
+
+@pytest.mark.parametrize("install_id", ["libitcl4.3.8.dylib", "/original/build/libitcl4.3.8.dylib", "@rpath/libitcl4.3.8.dylib"])
+def test_dynamic_library_install_id_is_not_a_loaded_dependency(tmp_path, monkeypatch, install_id):
+    binary = tmp_path / "libitcl4.3.8.dylib"
+    binary.write_bytes(b"\xcf\xfa\xed\xfe")
+    calls = []
+
+    def inspect(command):
+        calls.append(command)
+        if "lipo" in command[0]:
+            return "arm64\n"
+        return otool_load_commands(("LC_ID_DYLIB", install_id), ("LC_LOAD_DYLIB", "/usr/lib/libSystem.B.dylib"))
+
+    monkeypatch.setattr(build_macos, "run", inspect)
+    assert build_macos.portable_binary_dependencies(tmp_path, "arm64")["macho_files"] == 1
+    assert calls[-1] == ["/usr/bin/otool", "-arch", "arm64", "-l", str(binary)]
+
+
+@pytest.mark.parametrize("dependency", ["libitcl4.3.8.dylib", "libother.dylib", "/outside/libother.dylib"])
+def test_install_id_does_not_whitelist_a_genuine_loaded_name(tmp_path, monkeypatch, dependency):
+    binary = tmp_path / "libitcl4.3.8.dylib"
+    binary.write_bytes(b"\xcf\xfa\xed\xfe")
+    output = otool_load_commands(("LC_ID_DYLIB", "libitcl4.3.8.dylib"), ("LC_LOAD_DYLIB", dependency))
+    monkeypatch.setattr(build_macos, "run", lambda command: "arm64\n" if "lipo" in command[0] else output)
+    with pytest.raises(RuntimeError, match="包外"):
+        build_macos.portable_binary_dependencies(tmp_path, "arm64")
+
+
+def test_genuine_absolute_load_of_the_binary_itself_is_not_exempted(tmp_path, monkeypatch):
+    binary = tmp_path / "libexample.dylib"
+    binary.write_bytes(b"\xcf\xfa\xed\xfe")
+    output = otool_load_commands(("LC_LOAD_DYLIB", str(binary)))
+    monkeypatch.setattr(build_macos, "run", lambda command: "arm64\n" if "lipo" in command[0] else output)
+    with pytest.raises(RuntimeError, match="包外"):
+        build_macos.portable_binary_dependencies(tmp_path, "arm64")
+
+
+@pytest.mark.parametrize("command", sorted(build_macos.DYLIB_LOAD_COMMANDS))
+def test_load_command_parser_covers_all_dylib_dependency_types(command):
+    output = otool_load_commands(("LC_ID_DYLIB", "self.dylib"), (command, "@loader_path/a library.dylib"))
+    assert build_macos.loaded_dylibs(output) == ["@loader_path/a library.dylib"]
+
+
+def test_load_command_parser_ignores_rpaths_and_architecture_headers():
+    output = otool_load_commands(("LC_ID_DYLIB", "own.dylib")) + "Load command 7\n cmd LC_RPATH\n path @loader_path/../lib (offset 12)\n"
+    output += "/portable/libexample.dylib (architecture x86_64):\n"
+    output += otool_load_commands(("LC_ID_DYLIB", "own.dylib"), ("LC_LOAD_DYLIB", "/usr/lib/libSystem.B.dylib"))
+    assert build_macos.loaded_dylibs(output) == ["/usr/lib/libSystem.B.dylib"]
+
+
+@pytest.mark.parametrize("output", ["Load command 1\n cmd LC_LOAD_DYLIB\n", "Load command 1\n cmd LC_LOAD_DYLIB\nLoad command 2\n cmd LC_UUID\n",
+                                   "Load command 1\n cmd LC_LOAD_DYLIB\n name missing-offset\n"])
+def test_load_command_parser_fails_if_dependency_name_cannot_be_read(output):
+    with pytest.raises(RuntimeError, match="名称"):
+        build_macos.loaded_dylibs(output)
 
 
 def test_workflow_is_only_manual_and_does_not_publish():
