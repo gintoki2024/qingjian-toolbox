@@ -2,6 +2,23 @@
 
 面向日常职场办公的本地工具合集，使用 Python + Qt，提供独立中文界面。重点是公文批量处理、材料核查与拖拽转换。
 
+<!-- UNIFIED_DOWNLOADS -->
+## 按电脑系统下载
+
+**[进入 Windows / macOS 统一下载页](https://github.com/gintoki2024/qingjian-toolbox/releases/tag/downloads-2026-11-06)**
+
+| 电脑系统 | 当前版本 | 完整运行包（推荐） | 轻量源码包 |
+| --- | --- | --- | --- |
+| Windows 10 / 11，64 位 | v0.11.2 正式版 | [下载 Windows 完整包](https://github.com/gintoki2024/qingjian-toolbox/releases/download/downloads-2026-11-06/QingjianToolbox-v0.11.2-Windows-x64-Full.zip) | [下载 Windows 源码](https://github.com/gintoki2024/qingjian-toolbox/releases/download/downloads-2026-11-06/QingjianToolbox-v0.11.2-Source.zip) |
+| Mac，Apple 芯片（M 系列） | v0.12.0 试用版 | [下载 Mac Apple 芯片完整包](https://github.com/gintoki2024/qingjian-toolbox/releases/download/downloads-2026-11-06/QingjianToolbox-v0.12.0-macOS-arm64-Full.zip) | [下载 Mac 源码](https://github.com/gintoki2024/qingjian-toolbox/releases/download/downloads-2026-11-06/QingjianToolbox-v0.12.0-macOS-Source.zip) |
+| Mac，Intel 芯片 | v0.12.0 试用版 | [下载 Mac Intel 完整包](https://github.com/gintoki2024/qingjian-toolbox/releases/download/downloads-2026-11-06/QingjianToolbox-v0.12.0-macOS-x86_64-Full.zip) | [下载 Mac 源码](https://github.com/gintoki2024/qingjian-toolbox/releases/download/downloads-2026-11-06/QingjianToolbox-v0.12.0-macOS-Source.zip) |
+
+完整运行包内置 Python 与必要组件；轻量源码包首次启动会自检并补齐缺失组件。Windows 与 Mac 的版本号分别维护。
+
+Mac 完整包要求 macOS 14.4 或以上，目前为试用版，尚未签名和公证。请直接在 Mac 上解压；芯片类型可在苹果菜单「关于本机」查看。详细启动说明和校验文件见统一下载页。
+
+<!-- /UNIFIED_DOWNLOADS -->
+
 <!-- MACOS_DOWNLOADS -->
 ## macOS 试用版 v0.12.0
 
