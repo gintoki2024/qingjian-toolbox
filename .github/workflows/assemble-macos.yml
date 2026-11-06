@@ -11,6 +11,9 @@ on:
       release_tag:
         required: true
         type: string
+      release_id:
+        required: true
+        type: string
       source_sha256:
         required: true
         type: string
@@ -30,13 +33,14 @@ jobs:
       BUILD_RUN: ${{ inputs.build_run_id }}
       BUILD_COMMIT: ${{ inputs.build_commit }}
       RELEASE_TAG: ${{ inputs.release_tag }}
+      RELEASE_ID: ${{ inputs.release_id }}
       SOURCE_SHA: ${{ inputs.source_sha256 }}
     steps:
       - name: Verify immutable build and upload assets to an existing draft
         shell: bash
         run: |
           python3 - <<'PY'
-          import hashlib, json, os, pathlib, re, subprocess, tempfile, zipfile
+          import hashlib, json, os, pathlib, re, subprocess, tempfile, zipfile, urllib.parse
           repo, run_id, commit, tag, source_sha = (os.environ[k] for k in
               ('GH_REPO', 'BUILD_RUN', 'BUILD_COMMIT', 'RELEASE_TAG', 'SOURCE_SHA'))
           assert repo == 'gintoki2024/qingjian-toolbox'
@@ -44,8 +48,13 @@ jobs:
           version_match = re.fullmatch(r'v(\d+\.\d+\.\d+)-macOS', tag)
           assert version_match and re.fullmatch(r'[0-9a-f]{64}', source_sha)
           version = version_match.group(1)
+          release_id = os.environ['RELEASE_ID']
+          assert release_id.isdecimal()
           def gh(*args):
-              return subprocess.run(['gh', *args], check=True, text=True, capture_output=True).stdout
+              done = subprocess.run(['gh', *args], text=True, capture_output=True)
+              if done.returncode:
+                  raise RuntimeError(done.stderr[-3000:] or done.stdout[-3000:])
+              return done.stdout
           def api(path):
               return json.loads(gh('api', 'repos/' + repo + '/' + path))
           run = api('actions/runs/' + run_id)
@@ -53,14 +62,18 @@ jobs:
           assert run['head_sha'] == commit and run['event'] == 'workflow_dispatch'
           assert run['path'] == '.github/workflows/build-macos.yml'
           assert run['repository']['full_name'] == repo
-          release = api('releases/tags/' + tag)
+          release = api('releases/' + release_id)
+          assert release['tag_name'] == tag
           assert release['draft'] and release['prerelease'], 'Only an existing Mac draft can receive files'
           digest = lambda p: hashlib.file_digest(p.open('rb'), 'sha256').hexdigest()
           with tempfile.TemporaryDirectory(prefix='qingjian-mac-assets-') as temporary:
               root = pathlib.Path(temporary)
               source_name = f'QingjianToolbox-v{version}-macOS-Source.zip'
-              gh('release', 'download', tag, '--repo', repo, '--pattern', source_name, '--dir', str(root))
               source = root / source_name
+              source_asset = next(a for a in release['assets'] if a['name'] == source_name)
+              with source.open('wb') as output:
+                  subprocess.run(['gh', 'api', 'repos/' + repo + '/releases/assets/' + str(source_asset['id']),
+                                  '-H', 'Accept: application/octet-stream'], stdout=output, check=True)
               assert digest(source) == source_sha
               files = [{'filename': source_name, 'bytes': source.stat().st_size, 'sha256': source_sha, 'mode': 'source'}]
               manifest = {'version': version, 'build_run_id': int(run_id), 'build_commit': commit,
@@ -98,8 +111,21 @@ jobs:
               checksums.write_text(''.join(row['sha256'] + '  ' + row['filename'] + '\n' for row in files), encoding='utf-8')
               summary = root / f'QingjianToolbox-v{version}-macOS-Release.json'
               summary.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-              assert api('releases/tags/' + tag)['draft'], 'Draft was published during assembly'
-              gh('release', 'upload', tag, '--repo', repo, *(str(p) for p in uploads + [checksums, summary]))
+              current = api('releases/' + release_id)
+              assert current['draft'], 'Draft was published during assembly'
+              assert current['upload_url'].startswith('https://uploads.github.com/repos/' + repo + '/releases/')
+              upload_url = current['upload_url'].split('{', 1)[0]
+              existing = {a['name']: a for a in current['assets']}
+              for path in uploads + [checksums, summary]:
+                  expected_digest = next((a['sha256'] for a in files if a['filename'] == path.name), None) or digest(path)
+                  if path.name in existing:
+                      assert existing[path.name].get('digest') == 'sha256:' + expected_digest
+                      assert existing[path.name]['size'] == path.stat().st_size
+                      continue
+                  response = json.loads(gh('api', '--method', 'POST',
+                      upload_url + '?name=' + urllib.parse.quote(path.name, safe=''),
+                      '-H', 'Content-Type: application/octet-stream', '--input', str(path)))
+                  assert response['digest'] == 'sha256:' + expected_digest
               print(json.dumps(manifest, ensure_ascii=False, indent=2))
               print('Assets uploaded to draft only; publication remains a separate step.')
           PY
