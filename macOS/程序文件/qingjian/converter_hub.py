@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from contextlib import contextmanager
 from pathlib import Path
 import tempfile
@@ -35,6 +36,28 @@ _LABELS = {
 }
 _ORDER = list(_LABELS)
 _CANONICAL = {'.jpeg': '.jpg', '.tif': '.tiff', '.markdown': '.md', '.yml': '.yaml', '.ndjson': '.jsonl'}
+_TABLE_INPUTS = {'.csv', '.tsv', '.xlsx', '.xls', '.ods'}
+_TABLE_OUTPUTS = {'.csv', '.tsv', '.xlsx'}
+_OPTION_KEYS = frozenset({'quality', 'max_edge', 'jpeg_background', 'dpi', 'sheet',
+                          'sheet_mode', 'encoding', 'delimiter', 'input_encoding',
+                          'input_delimiter'})
+
+
+def _safe_options(options):
+    """Copy the public, scalar settings; never accept runner control keys."""
+    if options is None:
+        return {}
+    if not isinstance(options, dict):
+        raise ValueError('转换设置必须为设置对象。')
+    result = {}
+    for key in _OPTION_KEYS:
+        if key not in options:
+            continue
+        value = options[key]
+        if value is not None and not isinstance(value, (str, int, float, bool)):
+            raise ValueError('转换设置只接受文本或数值：' + key)
+        result[key] = value
+    return result
 
 
 def target_title(action_id):
@@ -65,6 +88,8 @@ def _targets(kind):
         targets.add('ofd')
     if kind in {'.txt', '.md', '.markdown'}:
         targets.add('utf8')
+    if kind in {'.csv', '.tsv'}:
+        targets.add('utf8')
     if kind in {'.svg', '.svgz'}:
         targets.update({'svg', 'svgz', 'png', 'jpg', 'pdf'})
     if kind in {'.ps', '.eps'}:
@@ -85,39 +110,134 @@ def _targets(kind):
         targets.update({'csv', 'xlsx', 'json'})
     if kind in {'.xls', '.ods'}:
         targets.add('json')
+    # Table recovery cannot reliably reproduce ordinary office sheets.
+    # It is absent from both the quick and advanced catalogue.
+    if kind == '.pdf':
+        targets.difference_update({'csv', 'xlsx'})
     targets.discard(_CANONICAL.get(kind, kind).lstrip('.'))
     return targets
 
 
-def available_targets(sources):
-    """Pure extension matching: safe to call on each drag-hover event."""
+def _quick_order(kind):
+    """A stable office-oriented list, without file I/O on drag-hover."""
+    if kind in {'.doc', '.docx', '.rtf', '.odt'}:
+        return ['pdf', 'docx', 'txt', 'md', 'doc', 'rtf', 'odt', 'html']
+    if kind == '.pdf':
+        return ['docx', 'jpg', 'png', 'txt', 'tiff']
+    if kind in {'.ppt', '.pptx', '.odp'}:
+        return ['pdf', 'jpg', 'png', 'pptx', 'txt', 'docx', 'ppt', 'odp']
+    if kind in _TABLE_INPUTS:
+        return ['pdf', 'xlsx', 'csv', 'tsv', 'utf8', 'xls', 'ods', 'html']
+    if kind in IMAGES:
+        return ['images_pdf', 'jpg', 'png', 'webp', 'pdf', 'tiff', 'bmp', 'gif', 'ico', 'avif', 'jp2']
+    if kind == '.ofd':
+        return ['pdf', 'jpg', 'png', 'txt']
+    if kind == 'url' or kind in {'.html', '.htm', '.xhtml', '.mht', '.mhtml'}:
+        return ['docx', 'pdf', 'txt', 'md', 'html']
+    if kind in {'.txt', '.md', '.markdown'}:
+        return ['docx', 'pdf', 'utf8', 'txt', 'md', 'html']
+    if kind in {'.eml', '.msg'}:
+        return ['pdf', 'attachments', 'docx', 'txt', 'html', 'eml']
+    if kind in ARCHIVES:
+        return ['extract', 'zip']
+    if kind in {'.svg', '.svgz', '.ps', '.eps'}:
+        return ['png', 'jpg', 'pdf', 'svg', 'svgz']
+    return []
+
+
+def _common_keys(kind):
+    """Do not fill a short first page with unrelated or legacy formats."""
+    if kind in {'.doc', '.docx', '.rtf', '.odt'}:
+        return {'pdf', 'docx', 'txt'}
+    if kind == '.pdf':
+        return {'docx', 'jpg', 'png', 'txt'}
+    if kind in {'.ppt', '.pptx', '.odp'}:
+        return {'pdf', 'jpg', 'png', 'pptx'}
+    if kind in _TABLE_INPUTS:
+        return {'pdf', 'xlsx', 'csv', 'utf8'}
+    if kind in IMAGES:
+        return {'images_pdf', 'jpg', 'png', 'webp', 'pdf'}
+    if kind == '.ofd':
+        return {'pdf', 'jpg', 'png'}
+    if kind == 'url' or kind in {'.html', '.htm', '.xhtml', '.mht', '.mhtml'}:
+        return {'docx', 'pdf'}
+    if kind in {'.txt', '.md', '.markdown'}:
+        return {'docx', 'pdf', 'utf8', 'txt'}
+    if kind in {'.eml', '.msg'}:
+        return {'pdf', 'attachments'}
+    if kind in ARCHIVES:
+        return {'extract', 'zip'}
+    if kind in {'.svg', '.svgz', '.ps', '.eps'}:
+        return {'png', 'jpg', 'pdf'}
+    return set()
+
+
+def _target_details(key, kinds, multiple):
+    glyph, title = _LABELS[key]
+    description = '拖入即转换，结果保存到原文件旁；不覆盖原件。'
+    if key == 'docx' and '.pdf' in kinds:
+        title, description = '文字PDF转Word', '适用于文字型 PDF；扫描件不进行 OCR，复杂排版需要复核。'
+    elif key == 'txt' and '.pdf' in kinds:
+        title, description = '提取文字', '提取可读取的文字；扫描页面不进行 OCR。'
+    elif key == 'pptx' and '.pdf' in kinds:
+        title, description = 'PDF页面放入PPT', '每页作为一张幻灯片图片；图片中的文字不能直接编辑。'
+    elif key in {'docx', 'txt'} and any(kind in {'.ppt', '.pptx', '.odp'} for kind in kinds):
+        title = '提取PPT文字到Word' if key == 'docx' else '提取PPT文字'
+        description = '提取幻灯片可读取的正文和表格文字；不保留原幻灯片版式、图表与动画。'
+    elif key in {'docx', 'pptx'} and all(kind in IMAGES for kind in kinds):
+        title = '图片放入Word' if key == 'docx' else '图片放入PPT'
+        description = '将图片放进文档；图片内的文字不会被识别，仍然是图片。'
+    elif key in {'png', 'jpg'} and any(kind in {'.pdf', '.ppt', '.pptx', '.odp', '.ofd'} for kind in kinds):
+        title = '逐页转 ' + glyph
+        description = '按页码生成图片，多页结果放在同一个结果文件夹中。'
+    elif key in {'csv', 'tsv'} and any(kind in _TABLE_INPUTS for kind in kinds):
+        title = '导出 ' + glyph
+        description = '导出单元格值，不保留样式或图表；多工作表需选择工作表或分别导出。'
+    elif key == 'utf8':
+        title, description = '转UTF-8编码', '生成 UTF-8 编码副本，保留原件；表格可先预览输入编码及分隔符。'
+    elif key == 'images_pdf':
+        title, description = '多图合并PDF', '按选定顺序合并为一个 PDF；结果保存到第一张图片所在目录。'
+    elif key in {'images_docx', 'images_pptx'}:
+        description = '按顺序装入图片；不识别图片内的文字，结果保存到第一张图片所在目录。'
+    elif key == 'pdf' and multiple and all(kind in IMAGES for kind in kinds):
+        title, description = '每张分别转PDF', '每张图片分别生成一个 PDF，保存到各自原目录。'
+    elif key == 'epub':
+        description = '生成 EPUB；不需要 GPU，但复杂图文会重新排版。'
+    elif key in {'vcf', 'ics'}:
+        description = '按标准字段导入；日历需要标题、开始时间，通讯录需要姓名列。'
+    return glyph, title, description
+
+
+def available_targets(sources, *, scope='quick', preferred=None):
+    """Match extensions only; advanced tools opt into ``scope='all'``.
+
+    ``preferred`` holds saved action IDs, not usage-based ranking, so target
+    ordering remains deterministic throughout a drag.
+    """
     if not isinstance(sources, (list, tuple)) or not sources or len(sources) > 500:
         return []
     kinds = [_kind(value) for value in sources]
     common = set.intersection(*[_targets(kind) for kind in kinds])
-    if all(kind != 'url' for kind in kinds):
-        common.add('pack_zip')
     if len(sources) > 1 and all(kind in IMAGES for kind in kinds):
         common.update({'images_pdf', 'images_docx', 'images_pptx'})
+    if scope == 'quick':
+        allowed = set.intersection(*[set(_quick_order(kind)) for kind in kinds])
+        common.intersection_update(allowed)
+    elif scope != 'all':
+        raise ValueError('未知转换目录：' + str(scope))
+    order = list(dict.fromkeys([key for kind in kinds for key in _quick_order(kind)] + _ORDER))
+    if isinstance(preferred, (list, tuple)):
+        saved = [str(key).removeprefix('convert:') for key in preferred]
+        order = list(dict.fromkeys([key for key in saved if key in common] + order))
+    first_page = set.intersection(*[_common_keys(kind) for kind in kinds]) & common
+    order = [key for key in order if key in first_page] + [key for key in order if key not in first_page]
     result = []
-    for key in _ORDER:
+    for key in order:
         if key not in common:
             continue
-        glyph, title = _LABELS[key]
-        description = '拖入即转换，结果保存到原文件旁；保留原件。'
-        if key == 'pptx' and '.pdf' in kinds:
-            description = 'PDF 每页保存为一张幻灯片图片，文字不能直接编辑。'
-        elif key in {'csv', 'xlsx', 'docx', 'txt'} and '.pdf' in kinds:
-            description = '提取已有文字与表格；扫描件不进行 OCR。'
-        elif key.startswith('images_') or key == 'pack_zip':
-            description = '合并选中的文件，保存到第一个文件所在目录。'
-        elif key == 'epub':
-            description = '轻量 EPUB，无需 GPU；保留内容与基本章节排版。'
-        elif key == 'utf8':
-            description = '保留文字与空白，生成 UTF-8 编码副本，原文件不变。'
-        elif key in {'vcf', 'ics'}:
-            description = '按标准列名导入；日历需要“标题、开始时间”，通讯录需要“姓名”。'
-        result.append({'id': 'convert:' + key, 'title': title, 'glyph': glyph, 'description': description})
+        glyph, title, description = _target_details(key, kinds, len(sources) > 1)
+        result.append({'id': 'convert:' + key, 'title': title, 'glyph': glyph,
+                       'description': description, 'group': 'common' if key in first_page else 'more'})
     return result
 
 
@@ -162,6 +282,10 @@ def _convert(source, target, key, options):
         return format_media.image_convert(source, target, options)
     if kind in {'.svg', '.svgz', '.ps', '.eps'}:
         return format_media.vector_convert(source, target, options)
+    # Ordinary sheets permit repeated/empty headers and multiple tabs.
+    # Structured-data conversion has stricter schema rules and stays separate.
+    if kind in _TABLE_INPUTS and out in _TABLE_OUTPUTS:
+        return format_office.convert(source, target, options)
     if kind in DATA | {'.vcf', '.ics'} or (kind in TABLES and out in DATA | TABLES | {'.vcf', '.ics'}):
         return format_data.convert(source, target, options)
     if kind in {'.xls', '.ods'} and out == '.json':
@@ -205,11 +329,36 @@ def _temporary_area(folder, cleanup_warnings):
             cleanup_warnings.append('结果已处理；部分临时文件被占用，未能自动清理：' + handle.name)
 
 
-def run_conversion(action_id, sources, url_folder=None, progress=None, cancel=None):
+def _bundle_name(output, number, stem, used, detail=None):
+    """Retain sheet/message names; number renderer's generic page names."""
+    produced = output.stem
+    if detail is not None:
+        base = safe_name(stem + '_' + str(detail), limit=140)
+    elif re.fullmatch(r'result(?:_\d+)?', produced):
+        base = safe_name(stem, limit=100) + f'_{number:03d}'
+    else:
+        detail = produced.removeprefix('result_')
+        base = safe_name(stem + '_' + detail, limit=140)
+    name = base + output.suffix
+    counter = 2
+    while name.casefold() in used:
+        name = base + f'_{counter}' + output.suffix
+        counter += 1
+    used.add(name.casefold())
+    return name
+
+
+def run_conversion(action_id, sources, url_folder=None, progress=None, cancel=None, *, options=None):
     from .quick_actions import _is_http, _local_source, _ACTION_LOCK
     result = {'outputs': [], 'records': [], 'errors': [], 'warnings': [], 'changes': 0,
               'cancelled': False, 'output_folders': [], 'action_id': action_id,
-              'total': len(sources) if isinstance(sources, (list, tuple)) else 0}
+              'total': len(sources) if isinstance(sources, (list, tuple)) else 0, 'options': {}}
+    try:
+        public_options = _safe_options(options)
+    except ValueError as exc:
+        result['errors'] = [str(exc)]
+        return result
+    result['options'] = dict(public_options)
     if not isinstance(sources, (list, tuple)) or not sources or len(sources) > 500:
         result['errors'] = ['请提供 1—500 个文件或网页链接。']
         return result
@@ -229,7 +378,8 @@ def run_conversion(action_id, sources, url_folder=None, progress=None, cancel=No
             value = group[0]
             label = str(value) if _is_http(str(value)) else Path(str(value)).name
             record = {'source': '；'.join(map(str, group)), 'status': 'failed', 'output': '', 'output_folder': '',
-                      'warnings': [], 'error': '', 'changes': 0}
+                      'warnings': [], 'error': '', 'changes': 0, 'outputs': [],
+                      'sources': list(map(str, group)), 'action_id': action_id, 'options': dict(public_options)}
             result['records'].append(record)
             notify(progress, index, len(groups), '正在转换：' + label)
             try:
@@ -255,15 +405,16 @@ def run_conversion(action_id, sources, url_folder=None, progress=None, cancel=No
                 cleanup_warnings = []
                 with _temporary_area(folder, cleanup_warnings) as staging:
                     staged = staging / ('result' + suffix)
-                    options = {'_cancel': cancel, 'extract': key == 'extract', 'attachments': key == 'attachments'}
+                    engine_options = {**public_options, '_cancel': cancel,
+                                      'extract': key == 'extract', 'attachments': key == 'attachments'}
                     if key == 'utf8':
-                        options['encoding'] = 'utf-8'
+                        engine_options['encoding'] = 'utf-8'
                     if merged:
                         local_sources = [_local_source(item, {'extensions': (Path(str(item)).suffix.lower(),)}) for item in group]
-                        options['_sources'] = local_sources
+                        engine_options['_sources'] = local_sources
                         if key == 'pack_zip':
-                            options['pack_sources'] = local_sources
-                    converted = _convert(source, staged, key, options) or {}
+                            engine_options['pack_sources'] = local_sources
+                    converted = _convert(source, staged, key, engine_options) or {}
                     outputs = [Path(p) for p in converted.get('outputs', [staged])]
                     if not outputs:
                         raise ValueError('转换没有生成结果。')
@@ -284,16 +435,21 @@ def run_conversion(action_id, sources, url_folder=None, progress=None, cancel=No
                     else:
                         bundle = staging / 'complete'
                         bundle.mkdir()
+                        used_names = set()
+                        bundle_names = []
+                        sheet_names = converted.get('output_sheets') or []
                         for page, output in enumerate(outputs, 1):
-                            destination = bundle / (safe_name(stem, limit=100) + f'_{page:03d}' + output.suffix)
+                            sheet = sheet_names[page - 1] if len(sheet_names) == len(outputs) else None
+                            destination = bundle / _bundle_name(output, page, stem, used_names, sheet)
                             output.rename(destination)
+                            bundle_names.append(destination.name)
                         published = _publish(bundle, folder, name + '_转' + _LABELS[key][0], '', cancel)
-                        published_outputs = [str(p) for p in sorted(published.iterdir())]
+                        published_outputs = [str(published / item) for item in bundle_names]
                 warnings = list(converted.get('warnings', [])) + cleanup_warnings
                 if merged:
                     warnings.append('合并结果保存在第一个文件所在目录。')
                 record.update(status='success', output=str(published), output_folder=str(folder),
-                              warnings=warnings, changes=len(published_outputs))
+                              outputs=published_outputs, warnings=warnings, changes=len(published_outputs))
                 result['outputs'].extend(published_outputs)
                 result['changes'] += len(published_outputs)
                 if str(folder) not in result['output_folders']:

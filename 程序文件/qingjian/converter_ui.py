@@ -15,13 +15,15 @@ from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QCursor, QKeySequence, QPainter, QPainterPath, QPainterPathStroker, QPen, QShortcut
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMenu, QProgressBar,
-    QPushButton, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget,
+    QPushButton, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget, QDialog,
+    QDialogButtonBox, QListWidget, QListWidgetItem,
 )
 
 from .quick_actions import ACTIONS, MAX_INPUTS, parse_mime_payload
 from .quick_ui import clipboard_sources
 from .drag_wheel import DragWheelBridge
 from .icons import bind_window_icon, titlebar_badge_pixmap
+from .converter_preferences import ConversionPreferences
 
 
 # Warm ivory surface, beige segments and a terracotta accent, in the spirit of
@@ -88,7 +90,7 @@ QToolTip { background: #383425; color: #faf9f5; border: none; border-radius: 8px
 """
 
 
-def available_targets(sources):
+def available_targets(sources, *, preferred=None):
     """Lazy catalogue access keeps startup independent of optional engines."""
     try:
         from .converter_hub import available_targets as catalogue
@@ -105,7 +107,7 @@ def available_targets(sources):
                 targets.append(dict(id=key, title=spec["title"], glyph=spec.get("glyph", "转"),
                                     description=spec["description"]))
         return targets
-    return catalogue(sources)
+    return catalogue(sources, preferred=preferred)
 
 
 def target_title(action_id):
@@ -266,7 +268,8 @@ class _Bubble(QPushButton):
 
 
 class FormatRing(QWidget):
-    """Eight true drop sectors per page, with native focusable target buttons."""
+    """Six drop sectors per page, filled in stable priority order."""
+    PAGE_SIZE = 6
 
     preview_requested = Signal(list)
     sources_dropped = Signal(list, str)
@@ -298,7 +301,15 @@ class FormatRing(QWidget):
 
     @property
     def visible_targets(self):
-        return self.targets[self.page * 8:(self.page + 1) * 8]
+        pages = self.target_pages
+        return pages[min(self.page, len(pages) - 1)]
+
+    @property
+    def target_pages(self):
+        common = [t for t in self.targets if t.get('group', 'common') == 'common']
+        more = [t for t in self.targets if t.get('group', 'common') != 'common']
+        ordered = common + more
+        return [ordered[i:i + self.PAGE_SIZE] for i in range(0, len(ordered), self.PAGE_SIZE)] or [[]]
 
     def set_targets(self, targets):
         clean = [dict(item) for item in targets if isinstance(item, dict) and item.get("id")]
@@ -310,7 +321,7 @@ class FormatRing(QWidget):
         self._rebuild()
 
     def turn_page(self, direction):
-        pages = max(1, math.ceil(len(self.targets) / 8))
+        pages = len(self.target_pages)
         if pages <= 1 or not self.isEnabled():
             return
         self.page = (self.page + direction) % pages
@@ -349,7 +360,7 @@ class FormatRing(QWidget):
             self.center.raise_()
         finally:
             self.setUpdatesEnabled(True)
-        self.page_changed.emit(self.page + 1, max(1, math.ceil(len(self.targets) / 8)))
+        self.page_changed.emit(self.page + 1, len(self.target_pages))
         self.update()
 
     def target_at(self, position):
@@ -477,7 +488,7 @@ class FormatRing(QWidget):
         self._drag_position = QPointF(event.position())
         self._flush_drag_wheel()
         self._hover = self.target_at(self._drag_position)
-        if len(self.targets) > 8:
+        if len(self.target_pages) > 1:
             self.drag_wheel.start()
         self._sync_active_labels()
         self.update()
@@ -519,7 +530,7 @@ class FormatRing(QWidget):
                 self._scroll_pages(delta)
 
     def _scroll_pages(self, delta, *, pixels=False):
-        if not delta or not self.isEnabled() or len(self.targets) <= 8:
+        if not delta or not self.isEnabled() or len(self.target_pages) <= 1:
             return False
         name, threshold = ("_pixel_remainder", 40) if pixels else ("_wheel_remainder", 120)
         remainder = getattr(self, name) + delta
@@ -557,6 +568,8 @@ class ConverterWindow(QWidget):
     folder_requested = Signal()
     choose_folder_requested = Signal()
     help_requested = Signal()
+    advanced_requested = Signal(list)
+    options_requested = Signal()
     dock_requested = Signal()
     closed = Signal()
 
@@ -571,6 +584,7 @@ class ConverterWindow(QWidget):
         self.setStyleSheet(CONVERTER_STYLE)
         self.setAcceptDrops(True)
         self.settings_path = Path(settings_path) if settings_path else None
+        self.preferences = ConversionPreferences(self.settings_path.with_name('converter-defaults.json') if self.settings_path else None)
         self.sources = []
         self._preview_values = None
         self.running = False
@@ -595,7 +609,7 @@ class ConverterWindow(QWidget):
         self.stack.addWidget(self.surface)
         body = QVBoxLayout(self.surface)
         body.setContentsMargins(12, 8, 12, 10)
-        body.setSpacing(5)
+        body.setSpacing(3)
         self.header = _DragHandle(self)
         self.header.setObjectName("converterHeader")
         self.header.setFixedHeight(28)
@@ -657,6 +671,16 @@ class ConverterWindow(QWidget):
         inputs.addWidget(self.paste_button, 1)
         inputs.addWidget(self.clear_button)
         body.addLayout(inputs)
+        tools = QHBoxLayout()
+        tools.setSpacing(2)
+        self.options_button = _button("参数", "converterQuiet", self.options_requested.emit, "选择目标后调整图片、PDF或表格参数")
+        self.advanced_button = _button("更多工具", "converterQuiet", lambda: self.advanced_requested.emit(list(self.sources)),
+                                       "内容提取、电子书、数据、通讯录与日历等低频转换")
+        self.zip_button = _button("打包 ZIP", "converterQuiet", self.pack_zip, "将选中的本地文件打包为一个 ZIP，保留原件")
+        tools.addWidget(self.options_button)
+        tools.addWidget(self.advanced_button, 1)
+        tools.addWidget(self.zip_button)
+        body.addLayout(tools)
         self.state = QFrame()
         self.state.setObjectName("converterStatus")
         status = QVBoxLayout(self.state)
@@ -705,7 +729,7 @@ class ConverterWindow(QWidget):
         self.previous_button.setVisible(pages > 1)
         self.next_button.setVisible(pages > 1)
         if self.ring.targets:
-            text = f"拖住滚轮切页 · {page}/{pages} · {len(self.ring.targets)} 种" if pages > 1 else f"可用 {len(self.ring.targets)} 种目标 · 点选即转"
+            text = f"格式 {page}/{pages} · 拖住滚轮切页" if pages > 1 else f"可转 {len(self.ring.targets)} 种 · 拖到目标松开"
         else:
             text = "拖到目标区域即可转换"
         self.page_label.setText(text)
@@ -768,6 +792,8 @@ class ConverterWindow(QWidget):
         paste.setEnabled(not self.running)
         menu.addAction("回到工具箱", self.dock_requested.emit)
         menu.addAction("转换格式与字段说明", self.help_requested.emit)
+        order = menu.addAction("调整本类文件的常用顺序", self.choose_order)
+        order.setEnabled(bool(self.sources) and not self.running)
         menu.addSeparator()
         menu.addAction("关闭转换小窗", self.close)
         menu.exec(self.mapToGlobal(point))
@@ -826,10 +852,10 @@ class ConverterWindow(QWidget):
             self.ring.set_targets([])
             self.notice(f"一次最多处理 {MAX_INPUTS} 项，请分批拖入。")
             return
-        targets = available_targets(sources)
+        targets = available_targets(sources, preferred=self.preferences.order(sources))
         self.ring.set_targets(targets)
         if not targets:
-            self.notice("这组文件没有共同的转换目标，请按类型分批拖入。")
+            self.notice("这组文件没有共同的常用转换目标。可按类型分批拖入，或选择更多工具 / 打包 ZIP。")
 
     def accept_sources(self, sources, target_id=""):
         if self.running:
@@ -894,6 +920,60 @@ class ConverterWindow(QWidget):
         self.submitted.emit(str(action_id), list(self.sources))
         return True
 
+    def pack_zip(self):
+        if self.running:
+            return False
+        if not self.sources or any(str(s).lower().startswith(('http://', 'https://')) for s in self.sources):
+            self.notice("打包 ZIP 需要先放入本地文件，不接受网页链接。")
+            return False
+        self.submitted.emit('convert:pack_zip', list(self.sources))
+        return True
+
+    def choose_order(self):
+        if self.running or not self.sources:
+            return
+        targets = available_targets(self.sources, preferred=self.preferences.order(self.sources))
+        if not targets:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("调整常用格式顺序")
+        dialog.resize(340, 390)
+        layout = QVBoxLayout(dialog)
+        caption = QLabel("常用格式优先，各组内按所选顺序排列；每页最多六项，排满后再翻页。只用于这一类文件。")
+        caption.setWordWrap(True)
+        layout.addWidget(caption)
+        items = QListWidget()
+        for target in targets:
+            item = QListWidgetItem(target['title'])
+            item.setData(Qt.ItemDataRole.UserRole, target['id'])
+            items.addItem(item)
+        items.setCurrentRow(0)
+        layout.addWidget(items)
+        moves = QHBoxLayout()
+        def move(delta):
+            row = items.currentRow()
+            if 0 <= row + delta < items.count():
+                item = items.takeItem(row)
+                items.insertItem(row + delta, item)
+                items.setCurrentRow(row + delta)
+        moves.addWidget(_button("上移", "converterAction", lambda: move(-1)))
+        moves.addWidget(_button("下移", "converterAction", lambda: move(1)))
+        layout.addLayout(moves)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("保存顺序")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            try:
+                self.preferences.remember_order(self.sources, [items.item(i).data(Qt.ItemDataRole.UserRole) for i in range(items.count())])
+                self._preview_values = None
+                self.preview_sources(self.sources)
+            except OSError as exc:
+                self.notice("顺序未能保存：" + str(exc))
+        dialog.deleteLater()
+
     def notice(self, message):
         self.status_label.setText(str(message))
         self.status_label.setToolTip(str(message))
@@ -904,7 +984,8 @@ class ConverterWindow(QWidget):
         self.running = bool(busy)
         self._own_job = bool(own_job)
         for control in (self.ring, self.choose_button, self.paste_button, self.clear_button,
-                        self.save_button, self.previous_button, self.next_button):
+                        self.save_button, self.previous_button, self.next_button,
+                        self.options_button, self.advanced_button, self.zip_button):
             control.setEnabled(not busy)
         self.cancel_button.setVisible(bool(busy and own_job))
         self.cancel_button.setEnabled(bool(busy and own_job))
@@ -918,14 +999,14 @@ class ConverterWindow(QWidget):
             self.notice("工具箱任务已结束，可以继续转换。")
         self.bubble.update()
 
-    def begin(self, action_id, count):
+    def begin(self, action_id, count, *, title=None):
         self._last_outputs = []
         self._has_result = False
         self.progress_ratio = 0
         self.set_busy(True, own_job=True)
         self.progress.show()
         self.progress.setRange(0, 0)
-        self.notice(target_title(action_id) + f" · 正在处理 {count} 项…")
+        self.notice((title or target_title(action_id)) + f" · 正在处理 {count} 项…")
 
     def update_progress(self, done, total, message):
         self.progress.setRange(0, max(1, total) if done else 0)
@@ -946,7 +1027,7 @@ class ConverterWindow(QWidget):
         if result.get("errors") and not self._last_outputs:
             text += " · " + str(result["errors"][0])
         elif result.get("warnings"):
-            text += " · 有提示，请查看结果"
+            text += " · 部分内容需要复核，请查看结果"
         self.progress.setRange(0, 100)
         self.progress.setValue(100)
         self.progress_ratio = 1

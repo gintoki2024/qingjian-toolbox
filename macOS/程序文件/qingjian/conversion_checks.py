@@ -142,7 +142,10 @@ def run(folder, check):
 
     def registry():
         office = {row['id'] for row in available_targets(['Z:/a.docx'])}
-        assert {'convert:pdf', 'convert:epub', 'convert:md'} <= office
+        assert 'convert:pdf' in office and 'convert:epub' not in office
+        advanced = {row['id'] for row in available_targets(['Z:/a.docx'], scope='all')}
+        assert {'convert:pdf', 'convert:epub', 'convert:md'} <= advanced
+        assert not {'convert:xlsx', 'convert:csv', 'convert:pptx'} & {row['id'] for row in available_targets(['Z:/a.pdf'])}
         mixed = {row['id'] for row in available_targets(['Z:/a.docx', 'Z:/a.pptx'])}
         assert 'convert:pdf' in mixed and 'convert:png' not in mixed
         return {'file_type_targets': True}

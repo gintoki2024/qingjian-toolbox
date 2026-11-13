@@ -82,7 +82,7 @@ def slides(tmp_path):
 
 def test_matrix_only_advertises_implemented_directions():
     assert supports("doc", "odt")
-    assert supports(".pdf", ".xlsx")
+    assert not supports(".pdf", ".xlsx")
     assert supports("https", "docx")
     assert supports(".epub", ".pdf")
     assert ".pptx" in targets_for(".png")
@@ -256,23 +256,25 @@ def test_csv_html_handles_xlsx_without_dimension_tag(tmp_path):
     assert "处理材料" in content
 
 
-def test_xlsx_csv_warns_for_other_sheets_and_formula_cache(tmp_path):
+def test_xlsx_csv_requires_sheet_and_cached_formula_values(tmp_path):
     source = tmp_path / "多表.xlsx"
     book = Workbook()
-    book.active.title = "账目"
+    book.active.title = "项目"
     book.active.append(["项目", "金额"])
     book.active.append(["甲", "=1+2"])
-    book.create_sheet("附件").append(["其他工作表"])
+    book.create_sheet("其他").append(["不能悄悄丢失"])
     book.save(source)
     book.close()
     target = tmp_path / "多表.csv"
-    result = convert(source, target)
-    assert "'=1+2" in target.read_text(encoding="utf-8-sig")
-    assert any("其余 1" in warning for warning in result["warnings"])
-    assert any("没有已计算值" in warning for warning in result["warnings"])
+    with pytest.raises(ValueError, match="多个工作表"):
+        convert(source, target)
+    assert not target.exists()
+    with pytest.raises(ValueError, match="未缓存"):
+        convert(source, target, {"sheet": "项目"})
+    assert not target.exists()
     target = tmp_path / "指定表.tsv"
-    convert(source, target, {"sheet": "附件"})
-    assert "其他工作表" in target.read_text(encoding="utf-8-sig")
+    convert(source, target, {"sheet": "其他"})
+    assert "不能悄悄丢失" in target.read_text(encoding="utf-8-sig")
 
 
 def test_xlsx_html_contains_all_sheets(tmp_path):
@@ -344,22 +346,10 @@ def test_pdf_text_word_and_table_content(pdf, tmp_path):
     document = Document(docx)
     assert any("Document page 1" in p.text for p in document.paragraphs)
     assert len(document.tables) == 2
-    xlsx = tmp_path / "表格.xlsx"
-    result = convert(pdf, xlsx)
-    book = load_workbook(xlsx)
-    try:
-        assert result["changes"] == 2
-        assert len(book.sheetnames) == 2
-        assert book.worksheets[0]["A2"].value == "Office 1"
-        assert book.worksheets[1]["B2"].value == "21"
-    finally:
-        book.close()
-    csv_path = tmp_path / "表格.csv"
-    convert(pdf, csv_path)
-    with csv_path.open(encoding="utf-8-sig", newline="") as stream:
-        rows = list(csv.reader(stream))
-    assert rows[0][:3] == ["来源页码", "表格序号", "表内行号"]
-    assert rows[-1] == ["2", "1", "2", "Office 2", "21"]
+    for suffix in (".xlsx", ".csv"):
+        assert not supports(".pdf", suffix)
+        with pytest.raises(ValueError):
+            convert(pdf, tmp_path / ("removed" + suffix))
 
 
 @pytest.mark.parametrize("extension", [".pdf", ".docx", ".pptx"])

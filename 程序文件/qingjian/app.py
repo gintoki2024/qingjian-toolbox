@@ -713,6 +713,7 @@ class Window(QMainWindow):
         self.home_page.notebook_requested.connect(self.notebook_requested)
         self.catalog_page.tool_requested.connect(lambda mode: self.switch_mode(MODES.index(mode)))
         self.catalog_page.scene_requested.connect(self.open_scene)
+        self.catalog_page.conversion_tools_requested.connect(self.show_advanced_conversion)
         self.presets_page.preset_requested.connect(self.open_preset)
         self.presets_page.delete_requested.connect(self.remove_preset)
         self.history_page.result_requested.connect(self.show_history_result)
@@ -1291,7 +1292,9 @@ class Window(QMainWindow):
             self.window_snap.register(self.converter_window)
             self.appearance.register(self.converter_window)
             bind_window_icon(self.converter_window, "converter")
-            self.converter_window.submitted.connect(self.start_quick_action)
+            self.converter_window.submitted.connect(self.request_conversion)
+            self.converter_window.advanced_requested.connect(self.show_advanced_conversion)
+            self.converter_window.options_requested.connect(self.choose_conversion_options)
             self.converter_window.cancel_requested.connect(self.stop_task)
             self.converter_window.results_requested.connect(self.show_quick_results)
             self.converter_window.folder_requested.connect(self.open_quick_folder)
@@ -1346,7 +1349,87 @@ class Window(QMainWindow):
         if self.converter_window is not None:
             self.converter_window.notice(message)
 
-    def start_quick_action(self, action_id, sources):
+    def _conversion_dialog(self, dialog):
+        self.window_snap.register(dialog)
+        self.appearance.register(dialog)
+        self.set_busy(True)
+        try:
+            return dialog.exec() == QDialog.DialogCode.Accepted
+        finally:
+            self.set_busy(False)
+
+    def request_conversion(self, action_id, sources, options=None, *, force_options=False):
+        """Only ambiguous operations need a lightweight preflight dialog."""
+        if self.worker or self._busy:
+            self._quick_notice("已有任务正在处理，完成后可继续转换。")
+            return False
+        if not sources:
+            self._quick_notice("请先放入文件，再选择转换目标。")
+            return False
+        if not self.converter_window:
+            self.show_converter()
+        preferences = self.converter_window.preferences
+        chosen = dict(preferences.options(sources) if options is None else options)
+        key = str(action_id).removeprefix('convert:')
+        extensions = {Path(str(s)).suffix.lower() for s in sources}
+        needs_review = options is None and (
+            (key in {'csv', 'tsv'} and bool(extensions & {'.xls', '.xlsx', '.ods'})) or
+            (bool(extensions & {'.csv', '.tsv'}) and key != 'pack_zip') or
+            (key in {'images_pdf', 'images_docx', 'images_pptx'} and len(sources) > 1)
+        )
+        if needs_review or force_options:
+            from .converter_dialogs import ConversionOptionsDialog
+            dialog = ConversionOptionsDialog(action_id, list(sources), chosen, self.converter_window)
+            try:
+                if not self._conversion_dialog(dialog):
+                    return False
+                chosen, sources = dialog.options(), dialog.ordered_sources()
+                try:
+                    preferences.remember_options(sources, chosen)
+                except OSError as exc:
+                    self._quick_notice("参数仅用于本次，默认值未能保存：" + str(exc))
+            finally:
+                dialog.deleteLater()
+        return self.start_quick_action(action_id, sources, options=chosen)
+
+    def choose_conversion_options(self):
+        if self.worker or self._busy or self.converter_window is None:
+            return
+        sources = list(self.converter_window.sources)
+        if not sources:
+            self._quick_notice("先拖入文件，再选择目标和参数。")
+            return
+        from .converter_hub import available_targets
+        targets = available_targets(sources)
+        if not targets:
+            self.show_advanced_conversion(sources)
+            return
+        titles = [row['title'] for row in targets]
+        title, ok = QInputDialog.getItem(self.converter_window, "转换参数", "先选择本次转换目标", titles, 0, False)
+        if ok:
+            self.request_conversion(targets[titles.index(title)]['id'], sources, force_options=True)
+
+    def show_advanced_conversion(self, sources=None):
+        if self.worker or self._busy:
+            self._quick_notice("已有任务正在处理，完成后可继续转换。")
+            return
+        if not sources:
+            sources, _ = QFileDialog.getOpenFileNames(self, "更多格式与内容提取 · 选择文件", "", "所有文件 (*)")
+        if not sources:
+            return
+        from .converter_dialogs import AdvancedConversionDialog
+        owner = self.converter_window if self.converter_is_visible() else self
+        dialog = AdvancedConversionDialog(list(sources), owner)
+        action = ''
+        try:
+            if self._conversion_dialog(dialog):
+                action = dialog.selected_action()
+        finally:
+            dialog.deleteLater()
+        if action:
+            self.request_conversion(action, list(sources))
+
+    def start_quick_action(self, action_id, sources, options=None):
         if self.worker or self._busy:
             self._quick_notice("已有任务正在处理，完成后可继续转换。")
             return False
@@ -1364,13 +1447,18 @@ class Window(QMainWindow):
             self.show_converter()
         self._quick_active = True
         self._quick_action_id = action_id
+        self._quick_title = conversion_target_title(action_id)
+        if action_id.startswith('convert:'):
+            from .converter_hub import available_targets
+            self._quick_title = next((row['title'] for row in available_targets(sources, scope='all')
+                                      if row['id'] == action_id), self._quick_title)
         self.last_context = None
         self.active_context = None
-        panel.begin(action_id, len(sources), title=conversion_target_title(action_id))
+        panel.begin(action_id, len(sources), title=self._quick_title)
         if self.converter_window is not None:
-            self.converter_window.begin(action_id, len(sources))
+            self.converter_window.begin(action_id, len(sources), title=self._quick_title)
         self.set_busy(True)
-        self.worker = QuickActionWorker(action_id, list(sources), panel.url_folder, self)
+        self.worker = QuickActionWorker(action_id, list(sources), panel.url_folder, self, options=options)
         self.worker.progress.connect(panel.update_progress)
         if self.converter_window is not None:
             self.worker.progress.connect(self.converter_window.update_progress)
@@ -1380,6 +1468,7 @@ class Window(QMainWindow):
         return True
 
     def on_quick_complete(self, result):
+        self._raw_conversion_result = copy.deepcopy(result)
         panel = self.conversion_session
         panel.finish(result)
         if self.converter_window is not None:
@@ -1396,7 +1485,7 @@ class Window(QMainWindow):
         self.last_context = None
         self.quick_result = copy.deepcopy(self.last_result)
         mode = {"web_to_word": "web", "to_text": "document_export", "image_to_jpg": "image_pack", "image_to_png": "image_pack"}.get(self._quick_action_id, "convert")
-        self.profile_store.record_task(mode, "快捷 · " + conversion_target_title(self._quick_action_id), self.last_result, "quick:" + self._quick_action_id)
+        self.profile_store.record_task(mode, "快捷 · " + self._quick_title, self.last_result, "quick:" + self._quick_action_id)
         self.refresh_workbench()
         self.result_button.setEnabled(bool(records))
         self.status.setText(panel.status_text)
@@ -1411,7 +1500,23 @@ class Window(QMainWindow):
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
     def show_quick_results(self):
-        if self.quick_result:
+        raw = getattr(self, '_raw_conversion_result', None)
+        if raw:
+            from .converter_dialogs import ConversionResultDialog
+            owner = self.converter_window if self.converter_is_visible() else self
+            dialog = ConversionResultDialog(raw, owner)
+            # The original worker's finished event must release the shared slot
+            # before a retry can start. Defer the request until this dialog closes.
+            retry = []
+            dialog.retry_requested.connect(lambda action, sources, options: retry.append((action, sources, options)))
+            self.window_snap.register(dialog)
+            self.appearance.register(dialog)
+            dialog.exec()
+            dialog.deleteLater()
+            if retry:
+                action, sources, options = retry[-1]
+                QTimer.singleShot(0, lambda: self.request_conversion(action, sources, options))
+        elif self.quick_result:
             owner = self.converter_window if self.converter_is_visible() else self
             ResultDialog(self.quick_result, owner, title="快捷转换 · 结果详情").exec()
 
@@ -2446,11 +2551,12 @@ class Window(QMainWindow):
         self._show_text_help("使用说明与能力范围", (
             "青简工具箱 " + __version__ + "\n\n"
             "格式转换浮窗\n"
-            "点击高亮“转换”按钮、主页“拆出”或 Ctrl+Shift+C 打开。文件拖入圆环中心后点选目标；也可以直接拖到目标扇区松开。支持批量文件、粘贴文件或链接、分页查看更多格式、折叠为小按钮、置顶和自由拖动。主窗口关闭后浮窗与正在执行的转换继续运行。\n"
+            "点击高亮“转换”按钮或 Ctrl+Shift+C 打开。文件拖入圆环中心后点选目标；也可以直接拖到目标扇区松开。常用页最多六项，拖住文件可滚轮切换更多格式；ZIP打包独立按钮，右键可调整本类文件的顺序。支持折叠、置顶和自由拖动，主窗口关闭后浮窗与任务继续运行。\n"
             "本地输入的结果保存在原文件旁；合并任务保存到首个文件所在目录；链接保存位置可更改。原件保留，同名结果自动编号，失败原因在“查看结果”中查看。\n\n"
             "转换范围\n"
-            "包含已选 01—15 类：Word、表格、PPT、PDF 内容与页面、图片制作文档、本地网页、文本/Markdown、常用图片、手机照片、矢量图、压缩包、邮件、结构化数据、通讯录与日历；另含 OFD 和轻量 EPUB 电子书，不需要 GPU。每种输入的具体方向由圆环显示，格式限制和 VCF/ICS 标准列名见《转换格式说明》。\n"
-            "在线网址需要联网；保存完整资源的 HTML/MHTML 可离线。不执行网页脚本。PDF 扫描页不进行 OCR；PDF 转 PPT 使用页面图片。\n\n"
+            "常用入口面向Office转PDF、旧资料转现代格式、PDF文字与页面、常见图片、网页归档、OFD和压缩包。表格有多工作表、编码或分隔符选择时先显示轻量设置；多图合并前可排序。图片与PDF清晰度可在参数中设置并记住。\n"
+            "PDF转Excel/CSV已移除。全部工具中的“更多格式与内容提取”和浮窗“更多工具”保留EPUB、结构数据、通讯录、日历及图片装入文档等低频能力；说明与标准字段见《转换格式说明》。\n"
+            "在线网址需要联网；保存完整资源的HTML/MHTML可离线。不执行网页脚本、不进行OCR。PDF页面放入PPT和图片装入文档仍为图片，文字不能直接编辑；PPT导出Word是提取可读取文字。\n\n"
             "原有办公工具\n"
             "从“全部工具”选择任务，添加文件并设置参数后开始。常规结果写入独立文件夹；原地改名需预览，并可通过撤销清单恢复。检查、提取与对账请复核生成的结果清单。\n"
             "公文排版可配置四级标题和版式、仅检查或生成样板；自定义脱敏支持多组替换规则与记忆库。Word/PPT 模板按 {{列名}} 批量填充。\n"

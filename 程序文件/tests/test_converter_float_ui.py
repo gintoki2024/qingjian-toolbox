@@ -127,9 +127,9 @@ def test_actual_drop_on_target_sector_starts_conversion_with_copy_semantics(tool
     floating.preview_sources([str(source)])
     key = jpeg_target(source)
     index = next(i for i, target in enumerate(floating.ring.targets) if target["id"] == key)
-    floating.ring.page = index // 8
+    floating.ring.page = index // floating.ring.PAGE_SIZE
     floating.ring._rebuild()
-    point = floating.ring.buttons[index % 8].geometry().center()
+    point = floating.ring.buttons[index % floating.ring.PAGE_SIZE].geometry().center()
     enter, drop = drag_drop(floating.ring, [source], point)
     assert enter.isAccepted() and drop.isAccepted()
     assert drop.dropAction() == Qt.DropAction.CopyAction
@@ -203,7 +203,7 @@ def test_ring_pagination_exposes_every_target_without_small_hitboxes():
     targets = [dict(id=f"test:{i}", title=f"目标{i}", glyph=str(i), description="测试目标") for i in range(19)]
     ring.set_targets(targets)
     seen = []
-    for _ in range(3):
+    for _ in range(4):
         seen.extend(item["id"] for item in ring.visible_targets)
         assert len(ring.buttons) == len(ring.visible_targets)
         for index, button in enumerate(ring.buttons):
@@ -212,6 +212,28 @@ def test_ring_pagination_exposes_every_target_without_small_hitboxes():
         ring.turn_page(1)
     assert seen == [item["id"] for item in targets]
     ring.deleteLater()
+
+
+def test_txt_targets_share_one_page_and_hide_unneeded_pagination(tmp_path):
+    floating = ConverterWindow(tmp_path / 'converter-window.json')
+    floating.show_window(collapsed=False)
+    try:
+        floating.accept_sources(['C:/示例/图片.png'])
+        assert len(floating.ring.target_pages) > 1
+        assert floating.previous_button.isVisible() and floating.next_button.isVisible()
+        floating.ring.turn_page(1)
+        floating.accept_sources(['C:/示例/文件.txt'])
+        pump()
+        assert len(floating.ring.targets) == 5
+        assert floating.ring.page == 0 and len(floating.ring.buttons) == 5
+        assert len(floating.ring.target_pages) == 1
+        assert not floating.previous_button.isVisible() and not floating.next_button.isVisible()
+        assert floating.page_label.text() == '可转 5 种 · 拖到目标松开'
+        for index, button in enumerate(floating.ring.buttons):
+            assert floating.ring.target_at(button.geometry().center()) == index
+    finally:
+        floating.shutdown()
+        floating.deleteLater()
 
 
 def test_busy_close_preserves_window_and_position_is_remembered(tmp_path):

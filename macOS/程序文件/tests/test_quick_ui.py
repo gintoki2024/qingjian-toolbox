@@ -292,6 +292,7 @@ class QuickChannelUITests(unittest.TestCase):
         self.assertTrue(self.window.start_quick_action("image_to_jpg", [str(source)]))
         self.wait_for_worker()
         expected = copy.deepcopy(self.window.quick_result)
+        expected_raw = copy.deepcopy(self.window._raw_conversion_result)
         self.assertEqual(expected["records"][0]["状态"], "失败")
         self.assertTrue(expected["records"][0]["原因"])
         self.assertTrue(self.floating.results_button.isEnabled())
@@ -299,11 +300,13 @@ class QuickChannelUITests(unittest.TestCase):
         self.assertFalse(self.floating.folder_button.isEnabled())
         self.assertEqual(self.window.profile_store.history[0]["status"], "失败")
         self.window.last_result = {"folder": "another ordinary result", "records": []}
-        with patch("qingjian.app.ResultDialog") as dialog:
+        with patch("qingjian.converter_dialogs.ConversionResultDialog") as dialog, \
+                patch.object(self.window.window_snap, "register"), patch.object(self.window.appearance, "register"):
             QTest.mouseClick(self.floating.results_button, Qt.MouseButton.LeftButton)
         dialog.assert_called_once()
-        self.assertEqual(dialog.call_args.args[0], expected)
-        self.assertIn("快捷转换", dialog.call_args.kwargs.get("title", ""))
+        self.assertEqual(dialog.call_args.args[0], expected_raw)
+        self.assertEqual(dialog.call_args.args[0]['records'][0]['status'], 'failed')
+        self.assertEqual(self.window.quick_result, expected)
 
     def test_unexpected_worker_error_reaches_error_details_and_history(self):
         source = self.image()
@@ -315,9 +318,11 @@ class QuickChannelUITests(unittest.TestCase):
         all_errors = result.get("fatal", "") + "\n" + "\n".join(row.get("原因", "") for row in result.get("records", []))
         self.assertIn("虚构后台异常", all_errors)
         self.assertEqual(self.window.profile_store.history[0]["status"], "失败")
-        with patch("qingjian.app.ResultDialog") as dialog:
+        with patch("qingjian.converter_dialogs.ConversionResultDialog") as dialog, \
+                patch.object(self.window.window_snap, "register"), patch.object(self.window.appearance, "register"):
             QTest.mouseClick(self.floating.results_button, Qt.MouseButton.LeftButton)
-        self.assertEqual(dialog.call_args.args[0], result)
+        self.assertEqual(dialog.call_args.args[0], self.window._raw_conversion_result)
+        self.assertIn('虚构后台异常', '\n'.join(dialog.call_args.args[0]['errors']))
 
     def test_mixed_drop_keeps_success_and_reports_invalid_item(self):
         source = self.image()
@@ -418,7 +423,7 @@ class QuickChannelUITests(unittest.TestCase):
             with self.subTest(size=(width, height)):
                 window.resize(width, height)
                 window.show_surface("home")
-                self.floating.set_url_folder(Path("C:/" + "非常长的链接保存目录/" * 18))
+                self.floating.set_url_folder(Path.home() / Path("非常长的链接保存目录/" * 18))
                 self.floating.notice("处理失败的具体原因 " * 100)
                 self.pump(8)
                 page = window.home_page

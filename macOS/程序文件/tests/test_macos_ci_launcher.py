@@ -17,13 +17,38 @@ def coordinator():
 
 def test_focused_regression_creates_parent_for_pytest_basetemp(tmp_path):
     module = coordinator()
+    tested=[]
     def run(arguments, **kwargs):
         if '--basetemp' in arguments:
             target = Path(arguments[arguments.index('--basetemp') + 1])
             assert target.parent.is_dir()
+            tested.append(target.name)
+            assert 'check_native' in arguments[arguments.index('-c')+1]
+            assert str(tmp_path/'home') in arguments
         return Mock(returncode=0)
     with patch.object(module.subprocess, 'run', side_effect=run):
         module.focused_regression(tmp_path / 'python', tmp_path / 'home', tmp_path / 'output')
+    assert tuple(tested)==module.REGRESSION_MODULES
+    assert {'test_converter_float_ui', 'test_converter_dialogs_local',
+            'test_converter_office_integration', 'test_office_conversion_local',
+            'test_converter_office_catalog', 'test_format_office'} <= set(tested)
+
+
+def test_source_payload_acceptance_rejects_stale_conversion_code(tmp_path):
+    module=coordinator()
+    project=tmp_path/'source'
+    bundle=tmp_path/'bundle'
+    relative=Path('qingjian/converter_ui.py')
+    source=project/relative
+    target=bundle/'程序文件'/relative
+    source.parent.mkdir(parents=True)
+    target.parent.mkdir(parents=True)
+    source.write_text('PAGE_SIZE = 6\n',encoding='utf-8')
+    target.write_bytes(source.read_bytes())
+    assert module.source_payload_acceptance(project,bundle)['passed']
+    target.write_text('PAGE_SIZE = 8\n',encoding='utf-8')
+    with pytest.raises(RuntimeError,match='converter_ui.py'):
+        module.source_payload_acceptance(project,bundle)
 
 
 @pytest.mark.parametrize('failure', ['', 'exit', 'missing', 'other-group'])

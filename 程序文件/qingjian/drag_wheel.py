@@ -71,7 +71,7 @@ class DragWheelBridge(QObject):
                         # Qt maps physical coordinates to the correct monitor's
                         # logical coordinates, including mixed-DPI desktops.
                         local = target.mapFromGlobal(QCursor.pos())
-                        if target._drag_active and target.isVisible() and target.isEnabled() and len(target.targets) > 8 and target.rect().contains(local):
+                        if target._drag_active and target.isVisible() and target.isEnabled() and len(target.target_pages) > 1 and target.rect().contains(local):
                             data = ctypes.cast(address, ctypes.POINTER(MouseInfo)).contents
                             delta = ctypes.c_short(data.mouseData >> 16).value
                             if delta:

@@ -236,7 +236,7 @@ def _publish(staged, folder, stem, suffix, cancel):
     raise ValueError("同名输出过多，请整理目录后重试。")
 
 
-def run_quick_action(action_id, sources, url_folder, progress=None, cancel=None) -> dict:
+def run_quick_action(action_id, sources, url_folder, progress=None, cancel=None, *, options=None) -> dict:
     """Convert independently, continuing after per-file failures.
 
     progress(done,total,message) is emitted from the calling worker thread.
@@ -245,7 +245,7 @@ def run_quick_action(action_id, sources, url_folder, progress=None, cancel=None)
     """
     if isinstance(action_id, str) and action_id.startswith("convert:"):
         from .converter_hub import run_conversion
-        return run_conversion(action_id, sources, url_folder, progress, cancel)
+        return run_conversion(action_id, sources, url_folder, progress, cancel, options=options)
     result = {"outputs": [], "records": [], "errors": [], "warnings": [], "changes": 0,
               "cancelled": False, "output_folders": [], "action_id": action_id,
               "total": len(sources) if isinstance(sources, (list, tuple)) else 0}
@@ -338,16 +338,18 @@ class QuickActionWorker(QThread):
     progress = Signal(int, int, str)
     completed = Signal(object)
 
-    def __init__(self, action_id, sources, url_folder, parent=None):
+    def __init__(self, action_id, sources, url_folder, parent=None, *, options=None):
         super().__init__(parent)
         self.action_id, self.sources = action_id, list(sources)
         self.url_folder = url_folder
+        self.options = dict(options or {})
 
     def run(self):
         try:
+            kwargs = {'options': self.options} if self.options else {}
             result = run_quick_action(self.action_id, self.sources, self.url_folder,
                                       lambda done, total, message: self.progress.emit(done, total, message),
-                                      self.isInterruptionRequested)
+                                      self.isInterruptionRequested, **kwargs)
         except Exception as exc:
             result = {"outputs": [], "records": [], "errors": [str(exc)], "warnings": [],
                       "cancelled": self.isInterruptionRequested(), "changes": 0,

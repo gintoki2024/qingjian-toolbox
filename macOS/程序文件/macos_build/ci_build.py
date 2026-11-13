@@ -6,6 +6,7 @@ changes repository visibility, creates a Release, or starts another workflow.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,38 @@ import subprocess
 import sys
 
 PROJECT = Path(__file__).resolve().parents[1]
+
+# Run each Qt module in its own process, including the new conversion routes,
+# preflight/worker interaction and six-target pagination on both Mac arches.
+REGRESSION_MODULES = (
+    "test_macos_bootstrap", "test_macos_native", "test_macos_core", "test_macos_packaging",
+    "test_macos_dependency_isolation", "test_macos_ci_launcher",
+    "test_converter_office_catalog", "test_office_conversion_local",
+    "test_converter_dialogs_local", "test_converter_office_integration",
+    "test_converter_float_ui", "test_drag_wheel", "test_quick_ui",
+    "test_conversion_hub_v090", "test_format_office", "test_quick_actions",
+    "test_saved_web_quick", "test_quick_compact",
+)
+
+
+def source_payload_acceptance(project: Path, bundle: Path) -> dict:
+    """Reject stale Python code or startup manifests in the offline bundle."""
+    from package_macos import source_files
+    program = bundle / "程序文件"
+    startup_names = {
+        "requirements.txt", "bootstrap-wheels.json", "macos-runtime-sources.json",
+        "macos-native-sources.json", "runtime-sources.json", "native-sources.json",
+    }
+    checked = []
+    for source in source_files(project):
+        relative = source.relative_to(project)
+        if source.suffix != ".py" and not (len(relative.parts) == 1 and source.name in startup_names):
+            continue
+        target = program / relative
+        if not target.is_file() or source.read_bytes() != target.read_bytes():
+            raise RuntimeError("完整包与本轮源码不一致：" + relative.as_posix())
+        checked.append({"file": relative.as_posix(), "sha256": hashlib.sha256(source.read_bytes()).hexdigest()})
+    return {"passed": True, "python_and_startup_files": len(checked), "files": checked}
 
 
 def execute(arguments: list[str], *, cwd: Path = PROJECT, env=None) -> None:
@@ -73,11 +106,22 @@ def focused_regression(python: Path, home: Path, output: Path) -> None:
     destination = output / "acceptance" / platform.machine()
     destination.mkdir(parents=True, exist_ok=True)
     (output / "tests-temp").mkdir(parents=True, exist_ok=True)
-    for name in ("test_macos_bootstrap", "test_macos_native", "test_macos_core", "test_macos_packaging",
-                 "test_macos_dependency_isolation", "test_macos_ci_launcher"):
+    # Discover only the already verified source environment in each child.
+    # This never installs engines, and lets content-level office tests exercise
+    # the same private LibreOffice/7zip/GS as source acceptance instead of
+    # silently skipping when no system engine is present.
+    runner = (
+        "import os,sys; from pathlib import Path; "
+        "from startup_macos_native import check_native; "
+        "native=check_native(Path(sys.argv.pop(1)),Path(sys.argv.pop(1))); "
+        "assert native.get('ready'), 'Mac regression requires prepared native engines'; "
+        "os.environ.update(native['env']); import pytest; "
+        "raise SystemExit(pytest.main(sys.argv[1:]))"
+    )
+    for name in REGRESSION_MODULES:
         environment = os.environ.copy()
         environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
-        subprocess.run([str(python), "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/" + name + ".py",
+        subprocess.run([str(python), "-c", runner, str(PROJECT), str(home), "-q", "-p", "no:cacheprovider", "tests/" + name + ".py",
                         "--basetemp", str(output / "tests-temp" / name),
                         "--junitxml", str(destination / (name + ".xml"))], cwd=PROJECT, env=environment, check=True)
 
@@ -127,6 +171,9 @@ def main(home: Path, output: Path) -> dict:
     # Keep real application acceptance independent of test-tool setup. Both
     # must pass before any distributable complete ZIP is produced.
     focused_regression(python, home, output)
+    integrity = source_payload_acceptance(PROJECT, bundle)
+    (verification / "源码与完整包一致性.json").write_text(
+        json.dumps(integrity, ensure_ascii=False, indent=2), encoding="utf-8")
     # Validation must precede publication of a complete archive.
     release = output / "release"
     release.mkdir(exist_ok=True)

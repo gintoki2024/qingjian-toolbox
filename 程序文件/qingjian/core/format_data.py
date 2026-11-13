@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import csv
 from datetime import date, datetime
-import io
 import json
 from pathlib import Path
 import re
@@ -17,8 +16,15 @@ TABLES = {'.csv', '.tsv', '.xlsx'}
 MAX_ROWS = 100000
 
 
-def read_text(path):
+def read_text(path, options=None):
+    from .format_tables import _encoding
+    encoding = _encoding(options or {}, input=True)
     data = Path(path).read_bytes()
+    if encoding != 'auto':
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError as exc:
+            raise ValueError(f'无法按 {encoding.upper()} 读取文本，请调整输入编码。') from exc
     if data.startswith((b'\xff\xfe', b'\xfe\xff')):
         return data.decode('utf-16')
     for encoding in ('utf-8-sig', 'gb18030'):
@@ -72,12 +78,12 @@ def _xml_node(name, value):
     return node
 
 
-def read_data(source, cancel=None):
+def read_data(source, cancel=None, options=None):
     source = Path(source)
     ext = source.suffix.lower()
     if ext in TABLES:
-        return read_table(source, cancel)
-    text = read_text(source)
+        return read_table(source, cancel, options)
+    text = read_text(source, options)
     if ext == '.json':
         return json.loads(text)
     if ext in {'.jsonl', '.ndjson'}:
@@ -106,19 +112,38 @@ def read_data(source, cancel=None):
     raise ValueError('不支持的数据格式：' + ext)
 
 
-def read_table(source, cancel=None):
+def read_table(source, cancel=None, options=None):
     source = Path(source)
+    options = dict(options or {})
+    if cancel is not None:
+        options['_cancel'] = cancel
+    cancel = options.get('_cancel')
+    cancel = cancel.is_set if hasattr(cancel, 'is_set') else cancel
+    values = []
+
+    def collect(rows):
+        for row in rows:
+            ensure_cancel(cancel)
+            values.append(row)
+            if len(values) > MAX_ROWS + 1:
+                raise ValueError('数据超过十万行，请分批转换。')
+
     if source.suffix.lower() == '.xlsx':
         from openpyxl import load_workbook
         book = load_workbook(source, read_only=True, data_only=False, keep_links=False)
         try:
-            if len(book.worksheets) != 1:
+            selected = options.get('sheet')
+            if selected and str(selected) not in book.sheetnames:
+                raise ValueError('未找到指定工作表：' + str(selected))
+            if not selected and len(book.worksheets) != 1:
                 raise ValueError('该文件有多个工作表，请先在表格工具中选择或拆分工作表后转换。')
-            values = list(book.active.iter_rows(values_only=True))
+            sheet = book[str(selected)] if selected else book.worksheets[0]
+            collect(sheet.iter_rows(values_only=True))
         finally:
             book.close()
     else:
-        values = list(csv.reader(io.StringIO(read_text(source)), delimiter='\t' if source.suffix.lower() == '.tsv' else ','))
+        from .format_tables import _text_rows
+        collect(_text_rows(source, options, []))
     if not values:
         raise ValueError('表格为空。')
     if len(values) > MAX_ROWS + 1:
@@ -325,6 +350,7 @@ def write_calendar(rows, target):
 def convert(source, target, options=None):
     options = options or {}
     cancel = options.get('_cancel')
+    cancel = cancel.is_set if hasattr(cancel, 'is_set') else cancel
     source, target = Path(source), Path(target)
     ensure_cancel(cancel)
     ext, out = source.suffix.lower(), target.suffix.lower()
@@ -333,7 +359,7 @@ def convert(source, target, options=None):
     elif ext == '.ics':
         data = read_calendar(source)
     else:
-        data = read_data(source, cancel)
+        data = read_data(source, cancel, options)
     warnings = []
     if out in TABLES:
         warnings += write_table(data, target, cancel)

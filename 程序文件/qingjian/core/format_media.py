@@ -84,48 +84,88 @@ def run_engine(args, cancel=None, timeout=180, cwd=None):
 
 
 def image_convert(source, target, options=None):
-    from PIL import Image, ImageOps
+    """Convert every page/frame; static outputs return one file per frame."""
+    from PIL import Image, ImageOps, ImageColor
+    from .format_office import _number
     import pillow_heif
     pillow_heif.register_heif_opener()
-    options = options or {}
+    options = dict(options or {})
+    source, target = Path(source), Path(target)
+    if os.path.lexists(target):
+        raise FileExistsError('输出图片已存在，未覆盖：' + target.name)
+    quality = _number(options.get('quality', 92), '图片质量', 1, 100)
+    max_edge = _number(options.get('max_edge', 0), '图片最长边', 0, 30000)
+    try:
+        background_color = ImageColor.getcolor(options.get('jpeg_background', '#ffffff'), 'RGB')
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise ValueError('JPG 背景色无效，请填写 #ffffff 等颜色值。') from exc
     cancel = options.get('_cancel')
+    cancel = cancel.is_set if hasattr(cancel, 'is_set') else cancel
     ensure_cancel(cancel)
-    frames = []
-    durations = []
-    warnings = []
+    frames, durations, warnings, outputs = [], [], [], []
     output = target.suffix.lower()
-    with Image.open(source) as image:
-        count = getattr(image, 'n_frames', 1)
-        if count > 1000:
-            raise ValueError('多帧图片超过 1000 帧，请先拆分。')
-        keep_frames = output in {'.tiff', '.gif', '.webp'}
-        for index in range(count if keep_frames else 1):
+    if output not in IMAGE_OUTPUTS | {'.jpeg', '.tif'}:
+        raise ValueError('不支持此图片输出格式。')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with Image.open(source) as image:
+            count = getattr(image, 'n_frames', 1)
+            if count > 1000:
+                raise ValueError('多帧图片超过 1000 帧，请先拆分。')
+            keep_frames = output in {'.tif', '.tiff', '.gif', '.webp'}
+            destinations = [target if index == 0 else target.with_name(f'{target.stem}_{index + 1:03d}{target.suffix}')
+                            for index in range(1 if keep_frames else count)]
+            for destination in destinations:
+                if os.path.lexists(destination):
+                    raise FileExistsError('输出图片已存在，未覆盖：' + destination.name)
+            total_pixels = 0
+            for index in range(count):
+                ensure_cancel(cancel)
+                image.seek(index)
+                frame = ImageOps.exif_transpose(image).convert('RGBA')
+                if max_edge:
+                    frame.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
+                total_pixels += frame.width * frame.height
+                if total_pixels > 250_000_000:
+                    frame.close()
+                    raise ValueError('图片总像素超过 2.5 亿，请缩小最长边或拆分后转换。')
+                if output in {'.jpg', '.jpeg', '.bmp', '.jp2'}:
+                    background = Image.new('RGB', frame.size, background_color)
+                    background.paste(frame, mask=frame.getchannel('A'))
+                    frame.close()
+                    frame = background
+                frames.append(frame)
+                durations.append(image.info.get('duration', 100))
+            if count > 1 and not keep_frames:
+                warnings.append(f'原文件含 {count} 帧/页，已逐帧分别输出 {count} 张静态图片，未丢弃后续内容。')
+            settings = {}
+            if output in {'.jpg', '.jpeg', '.webp', '.avif'}:
+                settings['quality'] = quality
+            if output in {'.jpg', '.jpeg'}:
+                settings['subsampling'] = 0
+            if len(frames) > 1 and keep_frames:
+                settings.update(save_all=True, append_images=frames[1:])
+                if output in {'.gif', '.webp'}:
+                    settings.update(duration=durations, loop=image.info.get('loop', 0))
+            if output == '.ico':
+                settings['sizes'] = [(16,16), (32,32), (48,48), (64,64), (128,128), (256,256)]
+                warnings.append('ICO 按标准图标尺寸生成，最大 256×256。')
+            for index, destination in enumerate(destinations):
+                ensure_cancel(cancel)
+                # Exclusive creation never replaces an existing output.
+                with destination.open('x+b') as stream:
+                    outputs.append(destination)
+                    frames[0 if keep_frames else index].save(
+                        stream, format=Image.registered_extensions()[output], **settings)
             ensure_cancel(cancel)
-            image.seek(index)
-            frame = ImageOps.exif_transpose(image).convert('RGBA')
-            if output in {'.jpg', '.bmp', '.jp2'}:
-                background = Image.new('RGB', frame.size, 'white')
-                background.paste(frame, mask=frame.getchannel('A'))
-                frame = background
-            frames.append(frame)
-            durations.append(image.info.get('duration', 100))
-        if count > 1 and not keep_frames:
-            warnings.append('目标为静态图片，仅保存第一帧；需要全部页面请使用 TIFF。')
-        settings = {}
-        if output in {'.jpg', '.webp', '.avif'}:
-            settings['quality'] = 92
-        if output == '.jpg':
-            settings['subsampling'] = 0
-        if len(frames) > 1:
-            settings.update(save_all=True, append_images=frames[1:])
-            if output in {'.gif', '.webp'}:
-                settings.update(duration=durations, loop=image.info.get('loop', 0))
-        if output == '.ico':
-            settings['sizes'] = [(16,16), (32,32), (48,48), (64,64), (128,128), (256,256)]
-            warnings.append('ICO 按常用图标尺寸生成，最大 256×256。')
-        frames[0].save(target, **settings)
-    ensure_cancel(cancel)
-    return {'changes': 1, 'outputs': [str(target)], 'warnings': warnings}
+    except BaseException:
+        for path in outputs:
+            path.unlink(missing_ok=True)
+        raise
+    finally:
+        for frame in frames:
+            frame.close()
+    return {'changes': count, 'outputs': [str(path) for path in outputs], 'warnings': warnings}
 
 
 def vector_convert(source, target, options=None):

@@ -19,7 +19,7 @@ def test_hover_is_extension_only_and_common(monkeypatch):
     options = {row['id'] for row in available_targets(['Z:/missing.docx', 'Z:/missing.pptx'])}
     assert 'convert:pdf' in options
     assert 'convert:png' not in options
-    assert 'convert:pack_zip' in options
+    assert 'convert:pack_zip' not in options
     assert not any('mobi' in row['id'] for row in available_targets(['Z:/a.epub']))
 
 

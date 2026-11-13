@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "mode": "source",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "platform": "macos",
   "architectures": [
     "arm64",

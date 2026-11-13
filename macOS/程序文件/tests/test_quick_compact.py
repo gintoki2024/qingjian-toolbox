@@ -93,7 +93,7 @@ class CompactQuickPanelTests(unittest.TestCase):
         for control in (self.panel.result_button, self.panel.open_folder_button):
             self.assertTrue(control.isVisible())
             self.assert_inside(control, self.panel)
-        self.panel.url_folder = Path("C:/" + "较长的保存位置/" * 100)
+        self.panel.url_folder = Path.home() / Path("较长的保存位置/" * 100)
         self.panel.resize(420, 338)
         self.pump()
         self.assertIn(str(self.panel.url_folder), self.panel.folder_label.toolTip())

@@ -512,6 +512,7 @@ class HomePage(_ScrollPage):
 class ToolCatalogPage(_ScrollPage):
     tool_requested = Signal(str)
     scene_requested = Signal(str)
+    conversion_tools_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -529,6 +530,9 @@ class ToolCatalogPage(_ScrollPage):
         self.search_edit.setAccessibleName("搜索工具")
         self.search_edit.textChanged.connect(self._filter)
         self.content.addWidget(self.search_edit)
+        self.conversion_tools_button = _button("更多格式与内容提取 · 电子书 / 数据 / 通讯录 / 日历", self.conversion_tools_requested.emit, "wbRow")
+        self.conversion_tools_button.setToolTip("低频转换集中在此，选择文件后查看适用目标；PDF 转 Excel / CSV 已移除。")
+        self.content.addWidget(self.conversion_tools_button)
         self.filters = _AdaptiveGrid(breakpoints=(250, 390, 520, 650, 780), maximum_columns=6)
         self.filters.grid.setHorizontalSpacing(8)
         self.filters.grid.setVerticalSpacing(8)

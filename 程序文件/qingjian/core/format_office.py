@@ -35,7 +35,7 @@ SLIDE_TYPES = frozenset({".ppt", ".pptx", ".odp"})
 WEB_TYPES = frozenset({".html", ".htm", ".xhtml", ".mht", ".mhtml"})
 TEXT_TYPES = frozenset({".txt", ".md", ".markdown"})
 IMAGE_TYPES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".gif", ".avif", ".ico", ".jp2", ".j2k", ".heic", ".heif"})
-PDF_TARGETS = frozenset({".docx", ".txt", ".xlsx", ".csv", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".pptx"})
+PDF_TARGETS = frozenset({".docx", ".txt", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".pptx"})
 MAX_SOURCE_BYTES = 512 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_MEMBER_BYTES = 64 * 1024 * 1024
@@ -88,7 +88,7 @@ def supports(source_ext: str, target_ext: str) -> bool:
         target_ext = "." + target_ext
     # The hub exposes this through a separate UTF-8 action, rather than a
     # confusing same-format choice among the normal format targets.
-    if source_ext == target_ext and source_ext in TEXT_TYPES:
+    if source_ext == target_ext and source_ext in TEXT_TYPES | {".csv", ".tsv"}:
         return True
     return target_ext in targets_for(source_ext)
 
@@ -565,32 +565,14 @@ def _html_output(content, target, options, warnings, temporary):
 
 
 def _sheet_xlsx(source, temporary, options, warnings):
-    from openpyxl import Workbook
     if source.suffix.lower() == ".xlsx":
         _office_safety(source)
         return source
     target = temporary / ("sheet-" + uuid.uuid4().hex[:8] + ".xlsx")
     if source.suffix.lower() in {".csv", ".tsv"}:
-        content = read_text_file(source, warnings)
-        delimiter = "\t" if source.suffix.lower() == ".tsv" else ","
-        book = Workbook(write_only=True)
-        sheet = book.create_sheet("数据")
-        from openpyxl.cell import WriteOnlyCell
-        for number, row in enumerate(csv.reader(io.StringIO(content), delimiter=delimiter), 1):
-            _check(options)
-            if number > 1_048_576 or len(row) > 16384:
-                raise ValueError("文本表格超过 Excel 行数或列数上限。")
-            cells = []
-            for value in row:
-                if len(value) > 32767:
-                    raise ValueError("单个单元格超过 Excel 的 32767 字符上限。")
-                cell = WriteOnlyCell(sheet, value=value)
-                cell.data_type = "s"  # No formula evaluation and no loss of leading zeros.
-                cells.append(cell)
-            sheet.append(cells)
-        book.save(target)
-        book.close()
-        warnings.append("CSV/TSV 按文本值导入，保留前导零；公式样式字符串不会执行。")
+        from .format_tables import convert as convert_table
+        result = convert_table(source, target, options)
+        warnings.extend(result.get("warnings", []))
     else:
         _lo(source, target, "sheet", options)
     return target
@@ -635,30 +617,6 @@ def _sheet_convert(source, target, temporary, options, warnings):
         if selected and selected not in book.sheetnames:
             raise ValueError("未找到指定工作表：" + str(selected))
         sheets = [book[str(selected)]] if selected else list(book.worksheets)
-        if ext in {".csv", ".tsv"}:
-            sheet = sheets[0]
-            if len(sheets) > 1:
-                warnings.append(f"{ext.upper()[1:]} 只保存第一个工作表“{sheet.title}”；其余 {len(sheets) - 1} 个工作表未带入。需要完整工作簿请选择 XLSX 或 ODS。")
-            with target.open("x", encoding="utf-8-sig", newline="") as stream:
-                writer = csv.writer(stream, delimiter="\t" if ext == ".tsv" else ",")
-                formula_rows = formulas[sheet.title].iter_rows()
-                count = 0
-                for row in sheet.iter_rows():
-                    _check(options)
-                    original = next(formula_rows)
-                    values = []
-                    for cell, formula in zip(row, original):
-                        value = cell.value
-                        if formula.data_type == "f" and value is None:
-                            value = "'" + str(formula.value)
-                            warnings.append("部分公式没有已计算值，已作为带前导单引号的文本导出；请在表格软件重新计算后另存再转换以取得数值。")
-                        elif isinstance(value, str) and value.startswith(("=", "+", "@")):
-                            value = "'" + value
-                            warnings.append("可能被表格软件当作公式的文本已加前导单引号，防止打开时执行。")
-                        values.append(value)
-                    writer.writerow(values)
-                    count += 1
-            return count
         body = []
         count = 0
         for sheet in sheets:
@@ -729,7 +687,7 @@ def _slide_text(source, target, temporary, options, warnings):
     return len(presentation.slides)
 
 
-def _pdf_text(source, target, options, warnings):
+def _pdf_text_pages(source, options, warnings):
     from pypdf import PdfReader
     reader = PdfReader(source)
     try:
@@ -737,61 +695,27 @@ def _pdf_text(source, target, options, warnings):
             raise ValueError("PDF 密码不正确或尚未填写。")
         if not 1 <= len(reader.pages) <= MAX_PAGES:
             raise ValueError(f"PDF 应有 1 至 {MAX_PAGES} 页。")
-        with target.open("x", encoding="utf-8") as stream:
-            for number, page in enumerate(reader.pages, 1):
-                _check(options)
-                text = page.extract_text() or ""
-                if not text.strip():
-                    warnings.append(f"第 {number} 页没有可提取文字；扫描页不进行 OCR。")
-                stream.write(text.rstrip() + "\n\n")
-        return len(reader.pages)
+        texts = []
+        for number, page in enumerate(reader.pages, 1):
+            _check(options)
+            text = page.extract_text() or ""
+            if not text.strip():
+                warnings.append(f"第 {number} 页没有可提取文字；扫描页不进行 OCR。")
+            texts.append(text)
+        if not any(text.strip() for text in texts):
+            raise ValueError("此 PDF 没有可提取的文字层，可能是扫描件或纯图片。当前工具不提供 OCR，无法生成可编辑文字；请使用逐页转图片，或先完成 OCR 后重试。")
+        return texts
     finally:
         reader.close()
 
 
-def _pdf_tables(source, target, options, warnings):
-    import pdfplumber
-    from openpyxl import Workbook
-    book = Workbook() if target.suffix.lower() == ".xlsx" else None
-    if book:
-        book.remove(book.active)
-    tables = []
-    with pdfplumber.open(source, password=options.get("password") or None) as pdf:
-        if not 1 <= len(pdf.pages) <= MAX_PAGES:
-            raise ValueError(f"PDF 应有 1 至 {MAX_PAGES} 页。")
-        for number, page in enumerate(pdf.pages, 1):
+def _pdf_text(source, target, options, warnings):
+    texts = _pdf_text_pages(source, options, warnings)
+    with target.open("x", encoding="utf-8") as stream:
+        for text in texts:
             _check(options)
-            for index, rows in enumerate(page.extract_tables() or [], 1):
-                _check(options)
-                if not rows or not any(any(cell for cell in row) for row in rows):
-                    continue
-                tables.append((number, index, rows))
-    if not tables:
-        raise ValueError("未找到可提取的带文字表格。扫描图片不做 OCR；无边框或复杂表格请转 Word 后复核。")
-    if book:
-        for page, number, rows in tables:
-            sheet = book.create_sheet(f"第{page}页_表{number}")
-            for row in rows:
-                _check(options)
-                sheet.append(row)
-                for cell in sheet[sheet.max_row]:
-                    if isinstance(cell.value, str):
-                        cell.data_type = "s"
-        book.save(target)
-        book.close()
-    else:
-        with target.open("x", encoding="utf-8-sig", newline="") as stream:
-            writer = csv.writer(stream)
-            maximum = max(len(row) for _, _, rows in tables for row in rows)
-            writer.writerow(["来源页码", "表格序号", "表内行号"] + [f"列{i}" for i in range(1, maximum + 1)])
-            for page, number, rows in tables:
-                for row_number, row in enumerate(rows, 1):
-                    _check(options)
-                    safe = [("'" + value if isinstance(value, str) and value.startswith(("=", "+", "@")) else value) for value in row]
-                    writer.writerow([page, number, row_number] + safe + [""] * (maximum - len(row)))
-        warnings.append("CSV 已附带来源页码、表格序号和表内行号；不同表格顺序合并到同一文件。")
-    warnings.append("PDF 表格提取依赖原文字层与表格线，合并单元格及复杂表头需要核对。")
-    return len(tables)
+            stream.write(text.rstrip() + "\n\n")
+    return len(texts)
 
 
 def _pdf_images(source, temporary, options):
@@ -884,6 +808,7 @@ def _images_document(images, target, options, warnings):
                 conversion._configure_section(section, page_w, page_h, 20)
                 previous = conversion._add_page_image(document, picture, section)
             document.save(target)
+            warnings.append("图片按页装入 Word；图片内文字仍是图片，不会识别为可编辑文字。")
         else:
             _pictures_pptx([picture for picture, _ in pictures], target, options)
             warnings.append("每页是一张图片，文字不会变为可编辑的 PPT 文本框。")
@@ -960,6 +885,9 @@ def convert(source: Path | str, target: Path, options: dict | None = None) -> di
         raise ValueError(f"不支持此转换方向：{source_ext} → {target.suffix.lower()}")
     if not is_url:
         source = _source(source)
+        from . import format_tables
+        if format_tables.supports(source_ext, target.suffix):
+            return format_tables.convert(source, target, options)
     target.parent.mkdir(parents=True, exist_ok=True)
     warnings = []
     changes = 1
@@ -983,13 +911,13 @@ def convert(source: Path | str, target: Path, options: dict | None = None) -> di
             changes = _images_document(images, staged, options, warnings)
         elif source_ext == ".pdf":
             if ext == ".docx":
+                if options.get("pdf_mode", "text") == "text":
+                    _pdf_text_pages(source, options, warnings)
                 result = conversion.pdf_to_word(source, staged, options)
                 changes = result.get("changes", 1)
                 warnings.extend(result.get("warnings", []))
             elif ext == ".txt":
                 changes = _pdf_text(source, staged, options, warnings)
-            elif ext in {".xlsx", ".csv"}:
-                changes = _pdf_tables(source, staged, options, warnings)
             else:
                 changes, produced = _pdf_visual(source, staged, temporary, options, warnings)
         elif source_ext in SHEET_TYPES:
