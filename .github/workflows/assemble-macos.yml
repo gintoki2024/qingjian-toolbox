@@ -26,7 +26,7 @@ concurrency:
 jobs:
   assemble:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -36,11 +36,16 @@ jobs:
       RELEASE_ID: ${{ inputs.release_id }}
       SOURCE_SHA: ${{ inputs.source_sha256 }}
     steps:
+      - name: Check out the publication helpers
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check document-only archive stamping
+        run: python3 -m unittest discover -s .github/scripts -p test_stamp_macos_release.py
       - name: Verify immutable build and upload assets to an existing draft
         shell: bash
         run: |
           python3 - <<'PY'
-          import hashlib, json, os, pathlib, re, subprocess, tempfile, zipfile, urllib.parse
+          import hashlib, json, os, pathlib, re, subprocess, tempfile, zipfile, urllib.parse, runpy
+          stamp_archive = runpy.run_path('.github/scripts/stamp_macos_release.py')['stamp_archive']
           repo, run_id, commit, tag, source_sha = (os.environ[k] for k in
               ('GH_REPO', 'BUILD_RUN', 'BUILD_COMMIT', 'RELEASE_TAG', 'SOURCE_SHA'))
           assert repo == 'gintoki2024/qingjian-toolbox'
@@ -84,6 +89,9 @@ jobs:
                                  if n.startswith('程序文件/') and (n.endswith('.py') or n in {
                                      '程序文件/requirements.txt', '程序文件/macos-runtime-sources.json',
                                      '程序文件/macos-native-sources.json', '程序文件/bootstrap-wheels.json'})}
+                  source_documents = {name: source_zip.read(name) for name in (
+                      '使用说明.txt', '程序文件/使用说明.txt', '程序文件/MACOS_README.txt',
+                      '程序文件/macos_build/使用说明-Mac.txt', '程序文件/MACOS_VALIDATION.txt')}
               for arch in ('arm64', 'x86_64'):
                   directory = root / arch
                   gh('run', 'download', run_id, '--repo', repo, '--name', f'Qingjian-macOS-{arch}-Full', '--dir', str(directory))
@@ -102,10 +110,18 @@ jobs:
                       assert validation['business_checks'] == 57 and validation['native_business_checks'] == 9
                       assert inventory['external_absolute_libraries'] == 0
                       assert all(full_zip.read(n) == data for n, data in source_code.items()), 'Source code differs from the tested bundle'
+                  original_build_sha256 = actual
+                  documented = root / 'documented' / name
+                  documented.parent.mkdir(exist_ok=True)
+                  documentation = stamp_archive(archive, documented, source_documents)
+                  assert documentation['verified'] and documentation['target_sha256'] == digest(documented)
+                  archive, actual = documented, documentation['target_sha256']
                   files.append({'filename': name, 'bytes': archive.stat().st_size, 'sha256': actual, 'mode': 'offline', 'architecture': arch})
                   manifest['platforms'][arch] = {'source_code_matches': True, 'source_files_compared': len(source_code),
                                                 'business_checks': 57, 'native_conversions': 9,
                                                 'macho_files': inventory['macho_files'], 'python_packages': inventory['python_packages']}
+                  manifest['platforms'][arch]['original_build_zip_sha256'] = original_build_sha256
+                  manifest['platforms'][arch]['documentation_only_stamp'] = documentation
                   uploads.append(archive)
               checksums = root / f'SHA256SUMS-macOS-v{version}.txt'
               checksums.write_text(''.join(row['sha256'] + '  ' + row['filename'] + '\n' for row in files), encoding='utf-8')
