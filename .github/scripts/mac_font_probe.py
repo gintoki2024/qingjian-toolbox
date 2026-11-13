@@ -191,8 +191,12 @@ def main():
     except Exception as exc:
         row.update(error=str(exc), traceback=traceback.format_exc())
     report["cases"].append(row)
-    for item in (source, epub):
-        mode = "host-fontconfig-" + item.suffix[1:]
+    explicit_docx = output / "all-explicit-Songti.docx"
+    set_generated_font(template, explicit_docx, "Songti SC")
+    for label, item in (("md", source), ("epub", epub),
+                        ("remove-themes", output / "remove-font-themes.docx"),
+                        ("explicit-Songti", explicit_docx)):
+        mode = "host-fontconfig-" + label
         pdf = output / (mode + ".pdf")
         row = {"case": mode}
         previous = {key: os.environ.get(key) for key in ("FONTCONFIG_FILE", "FONTCONFIG_PATH", "SAL_USE_VCLPLUGIN")}
