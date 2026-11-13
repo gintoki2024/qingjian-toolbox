@@ -266,8 +266,22 @@ def test_postscript_retains_multiple_rendered_pages(tmp_path, monkeypatch):
     from PIL import Image
     source = tmp_path / 'two.ps'
     source.write_text('%!PS')
-    monkeypatch.setattr(format_media, 'engine', lambda _: Path('gs.exe'))
+    # A render stub still needs a complete private resource layout on macOS.
+    # Keep the production resource checks active before the mocked process.
+    gs = tmp_path / 'Ghostscript/bin/gs'
+    gs.parent.mkdir(parents=True)
+    gs.write_bytes(b'test-render-stub')
+    gs.chmod(0o755)
+    resources = gs.parent.parent / 'share/ghostscript/10.07.0'
+    for name in ('Resource/Init/gs_init.ps', 'iccprofiles/default_rgb.icc'):
+        entry = resources / name
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        entry.write_bytes(b'fixture-resource')
+    monkeypatch.setattr(format_media, 'engine', lambda _: gs)
     def render(args, cancel):
+        if format_media.sys.platform == 'darwin':
+            assert '-sGenericResourceDir=' + str(resources / 'Resource') + '/' in args
+            assert '-sICCProfilesDir=' + str(resources / 'iccprofiles') + '/' in args
         pattern = next(str(a)[len('-sOutputFile='):] for a in args if str(a).startswith('-sOutputFile='))
         for number, color in [(1, 'red'), (2, 'blue')]:
             Image.new('RGB', (20,20), color).save(pattern % number)
