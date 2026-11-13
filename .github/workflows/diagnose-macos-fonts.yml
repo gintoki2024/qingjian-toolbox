@@ -5,15 +5,26 @@ permissions:
   contents: read
 jobs:
   font-probe:
-    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - arch: arm64
+            runner: macos-15
+            sha256: 02f6c94d7b8128be294ffafdd2ff9437df466bc6bf410fe12f281f1e23b72a8d
+          - arch: x86_64
+            runner: macos-15-intel
+            sha256: 70c9d688586beb08ba539006ba6660bcc81f55093790ee0ff37fb03a48be1d76
+    runs-on: ${{ matrix.target.runner }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Reuse the hash-verified published Mac runtime
         shell: bash
         run: |
-          curl --fail --location --retry 3 --output "$RUNNER_TEMP/runtime.zip" 'https://github.com/gintoki2024/qingjian-toolbox/releases/download/v0.12.0-macOS/QingjianToolbox-v0.12.0-macOS-arm64-Full.zip'
-          echo '02f6c94d7b8128be294ffafdd2ff9437df466bc6bf410fe12f281f1e23b72a8d  '"$RUNNER_TEMP/runtime.zip" | shasum -a 256 --check
+          test "$(uname -m)" = '${{ matrix.target.arch }}'
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/runtime.zip" 'https://github.com/gintoki2024/qingjian-toolbox/releases/download/v0.12.0-macOS/QingjianToolbox-v0.12.0-macOS-${{ matrix.target.arch }}-Full.zip'
+          echo '${{ matrix.target.sha256 }}  '"$RUNNER_TEMP/runtime.zip" | shasum -a 256 --check
           mkdir "$RUNNER_TEMP/runtime"
           /usr/bin/ditto -x -k "$RUNNER_TEMP/runtime.zip" "$RUNNER_TEMP/runtime"
       - name: Compare Chinese font render and text extraction
@@ -24,7 +35,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: macOS-font-diagnostics
+          name: macOS-font-diagnostics-${{ matrix.target.arch }}
           path: ${{ runner.temp }}/font-diagnostics/
           if-no-files-found: error
           retention-days: 3

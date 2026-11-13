@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import traceback
+from html import escape
 from pathlib import Path
 
 
@@ -60,6 +61,17 @@ def set_generated_font(source, destination, family):
                 for paragraph in cell.paragraphs:
                     for run in paragraph.runs:
                         font(run)
+    document.save(destination)
+
+
+def clear_generated_font_themes(source, destination):
+    from docx import Document
+    from docx.oxml.ns import qn
+    document = Document(source)
+    for root in (document.element, document.styles.element):
+        for fonts in root.xpath(".//w:rFonts"):
+            for key in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme", "csTheme"):
+                fonts.attrib.pop(qn("w:" + key), None)
     document.save(destination)
 
 
@@ -170,6 +182,48 @@ def main():
                 row.update(error=str(exc), traceback=traceback.format_exc())
             report["cases"].append(row)
     template = output / "md-original.docx"
+    row = {"case": "remove-font-themes"}
+    try:
+        docx, pdf = output / "remove-font-themes.docx", output / "remove-font-themes.pdf"
+        clear_generated_font_themes(template, docx)
+        row["result"] = format_office.convert(docx, pdf, options)
+        row.update(pdf_report(pdf))
+    except Exception as exc:
+        row.update(error=str(exc), traceback=traceback.format_exc())
+    report["cases"].append(row)
+    for item in (source, epub):
+        mode = "host-fontconfig-" + item.suffix[1:]
+        pdf = output / (mode + ".pdf")
+        row = {"case": mode}
+        previous = {key: os.environ.get(key) for key in ("FONTCONFIG_FILE", "FONTCONFIG_PATH", "SAL_USE_VCLPLUGIN")}
+        try:
+            configuration = output / "fontconfig"
+            configuration.mkdir(exist_ok=True)
+            fontconfig = configuration / "fonts.conf"
+            fontdirs = [Path("/System/Library/Fonts"), Path("/System/Library/Assets"),
+                        Path("/System/Library/AssetsV2"), Path("/Library/Fonts"), Path.home() / "Library/Fonts"]
+            resources = Path(engine).resolve().parent.parent / "Resources"
+            if (resources / "fonts/truetype").is_dir():
+                fontdirs.append(resources / "fonts/truetype")
+            elif (resources / "fonts").is_dir():
+                fontdirs.append(resources / "fonts")
+            cache = output / "font-cache"
+            cache.mkdir(exist_ok=True)
+            fontconfig.write_text('<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd"><fontconfig>' +
+                                  "".join("<dir>" + escape(str(folder)) + "</dir>" for folder in fontdirs if folder.is_dir()) +
+                                  "<cachedir>" + escape(str(cache)) + "</cachedir></fontconfig>", encoding="utf-8")
+            os.environ.update(FONTCONFIG_FILE=str(fontconfig), FONTCONFIG_PATH=str(configuration))
+            row["result"] = format_office.convert(item, pdf, options)
+            row.update(pdf_report(pdf))
+        except Exception as exc:
+            row.update(error=str(exc), traceback=traceback.format_exc())
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+        report["cases"].append(row)
     for family in ("Songti SC", "PingFang SC", "Heiti SC", "Arial Unicode MS", "STSong"):
         stem = "font-" + family.replace(" ", "-")
         docx, pdf = output / (stem + ".docx"), output / (stem + ".pdf")
