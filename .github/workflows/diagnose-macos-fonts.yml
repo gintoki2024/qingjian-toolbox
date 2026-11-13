@@ -1,0 +1,30 @@
+name: Diagnose macOS generated document fonts
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  font-probe:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Reuse the hash-verified published Mac runtime
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/runtime.zip" 'https://github.com/gintoki2024/qingjian-toolbox/releases/download/v0.12.0-macOS/QingjianToolbox-v0.12.0-macOS-arm64-Full.zip'
+          echo '02f6c94d7b8128be294ffafdd2ff9437df466bc6bf410fe12f281f1e23b72a8d  '"$RUNNER_TEMP/runtime.zip" | shasum -a 256 --check
+          mkdir "$RUNNER_TEMP/runtime"
+          /usr/bin/ditto -x -k "$RUNNER_TEMP/runtime.zip" "$RUNNER_TEMP/runtime"
+      - name: Compare Chinese font render and text extraction
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/runtime/程序文件/Python/bin/python3" -I -B .github/scripts/mac_font_probe.py --project "$GITHUB_WORKSPACE/macOS/程序文件" --output "$RUNNER_TEMP/font-diagnostics" --libreoffice "$RUNNER_TEMP/runtime/程序文件/native/LibreOffice/LibreOffice.app/Contents/MacOS/soffice"
+      - name: Preserve input, output, font maps, and rendered pages
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: macOS-font-diagnostics
+          path: ${{ runner.temp }}/font-diagnostics/
+          if-no-files-found: error
+          retention-days: 3
