@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication
 
 from qingjian.quick_ui import QuickPanel, QUICK_STYLE
 from qingjian.theme import STYLE
+from qingjian.platform_support import shortcut_text
 
 
 class CompactQuickPanelTests(unittest.TestCase):
@@ -66,8 +67,8 @@ class CompactQuickPanelTests(unittest.TestCase):
                     self.assert_inside(card.title_label, card)
                     self.assert_inside(card.hint_label, card)
                     self.assertTrue(card.description_label.isHidden())
-                    self.assertNotIn("Ctrl+V", card.hint_label.text())
-                    self.assertIn("Ctrl+V", card.toolTip())
+                    self.assertNotIn(shortcut_text("Ctrl+V"), card.hint_label.text())
+                    self.assertIn(shortcut_text("Ctrl+V"), card.toolTip())
                     self.assertIn(card.spec["description"], card.accessibleDescription())
                 for control in (self.panel.url_edit, self.panel.paste_button,
                                 self.panel.choose_folder_button, self.panel.cancel_button):
@@ -108,7 +109,7 @@ class CompactQuickPanelTests(unittest.TestCase):
         self.assertEqual(len({card.x() for card in self.panel.cards.values()}), 3)
         for card in self.panel.cards.values():
             self.assertTrue(card.description_label.isVisible())
-            self.assertIn("Ctrl+V", card.hint_label.text())
+            self.assertIn(shortcut_text("Ctrl+V"), card.hint_label.text())
             self.assertGreaterEqual(card.height(), 102)
         self.assertEqual(self.panel.choose_folder_button.text(), "更改链接保存位置")
         self.assertEqual(self.panel.paste_button.text(), "粘贴并转换")
