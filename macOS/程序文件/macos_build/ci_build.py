@@ -105,7 +105,8 @@ def focused_regression(python: Path, home: Path, output: Path) -> None:
         raise RuntimeError("Mac 验收依赖安装未完成：" + "；".join(failures))
     destination = output / "acceptance" / platform.machine()
     destination.mkdir(parents=True, exist_ok=True)
-    (output / "tests-temp").mkdir(parents=True, exist_ok=True)
+    test_temp = (output / "tests-temp").resolve()
+    test_temp.mkdir(parents=True, exist_ok=True)
     # Discover only the already verified source environment in each child.
     # This never installs engines, and lets content-level office tests exercise
     # the same private LibreOffice/7zip/GS as source acceptance instead of
@@ -115,14 +116,20 @@ def focused_regression(python: Path, home: Path, output: Path) -> None:
         "from startup_macos_native import check_native; "
         "native=check_native(Path(sys.argv.pop(1)),Path(sys.argv.pop(1))); "
         "assert native.get('ready'), 'Mac regression requires prepared native engines'; "
-        "os.environ.update(native['env']); import pytest; "
+        "os.environ.update(native['env']); "
+        "os.environ['QINGJIAN_OFFICE_TEST_ENGINE']=native['env']['QINGJIAN_LIBREOFFICE']; "
+        "import pytest; "
         "raise SystemExit(pytest.main(sys.argv[1:]))"
     )
     for name in REGRESSION_MODULES:
         environment = os.environ.copy()
         environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+        # This applies only to the isolated test child. Keep real file fixtures
+        # under the runner's canonical work directory, rather than macOS's
+        # /var alias, without weakening the application's source protections.
+        environment.update({key: str(test_temp) for key in ("TMPDIR", "TEMP", "TMP", "QINGJIAN_TEST_TMPDIR")})
         subprocess.run([str(python), "-c", runner, str(PROJECT), str(home), "-q", "-p", "no:cacheprovider", "tests/" + name + ".py",
-                        "--basetemp", str(output / "tests-temp" / name),
+                        "--basetemp", str(test_temp / name),
                         "--junitxml", str(destination / (name + ".xml"))], cwd=PROJECT, env=environment, check=True)
 
 

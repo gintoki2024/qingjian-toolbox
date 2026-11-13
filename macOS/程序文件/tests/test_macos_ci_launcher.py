@@ -51,6 +51,33 @@ def test_source_payload_acceptance_rejects_stale_conversion_code(tmp_path):
         module.source_payload_acceptance(project,bundle)
 
 
+def test_focused_regression_uses_canonical_temp_directory_only_in_children(tmp_path,monkeypatch):
+    module=coordinator()
+    # A path with an alias-like ".." component has a real, portable canonical
+    # directory without requiring symlink privileges on the Windows rehearsal.
+    alias=tmp_path/'alias'
+    alias.mkdir()
+    output=alias/'..'/'actual-output'
+    expected=(tmp_path/'actual-output/tests-temp').resolve()
+    keys=('TMPDIR','TEMP','TMP','QINGJIAN_TEST_TMPDIR')
+    for key in keys:
+        monkeypatch.setenv(key,'caller-value-'+key)
+    calls=[]
+    def run(arguments,**kwargs):
+        values=kwargs['env']
+        calls.append(values)
+        assert expected.is_dir()
+        assert all(Path(values[key])==expected for key in keys)
+        assert all(Path(values[key]).resolve()==Path(values[key]) for key in keys)
+        base=Path(arguments[arguments.index('--basetemp')+1])
+        assert base.parent.samefile(expected)
+        return Mock(returncode=0)
+    with patch.object(module,'execute'),patch.object(module.subprocess,'run',side_effect=run):
+        module.focused_regression(tmp_path/'python',tmp_path/'home',output)
+    assert len(calls)==len(module.REGRESSION_MODULES)
+    assert all(module.os.environ[key]=='caller-value-'+key for key in keys)
+
+
 @pytest.mark.parametrize('failure', ['', 'exit', 'missing', 'other-group'])
 def test_source_launch_cleanup_requires_ready_and_own_session(tmp_path, failure):
     module = coordinator()

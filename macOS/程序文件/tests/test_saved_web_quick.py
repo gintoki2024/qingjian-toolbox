@@ -24,7 +24,7 @@ from qingjian.core.web_ops import webpage_to_word
 
 class SavedWebQuickTests(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.gettempdir()) / ("qingjian-saved-web-" + uuid.uuid4().hex)
+        self.root = Path(tempfile.gettempdir()).resolve() / ("qingjian-saved-web-" + uuid.uuid4().hex)
         self.root.mkdir()
         self.target = self.root / "结果.docx"
         image = io.BytesIO()

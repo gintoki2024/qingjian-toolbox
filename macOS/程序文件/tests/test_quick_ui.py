@@ -40,7 +40,9 @@ class QuickChannelUITests(unittest.TestCase):
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(dir=os.environ.get("QINGJIAN_TEST_TMPDIR"))
-        self.root = Path(self.temporary.name)
+        # macOS /var is an alias of /private/var. Use the actual fixture root
+        # so ordinary files do not exercise the intentional symlink guard.
+        self.root = Path(self.temporary.name).resolve()
         self.window = Window(start_home=True, data_path=self.root / "profile.json")
         # Keep input-widget regressions without constructing a hidden shortcut
         # panel in the product homepage or using it as conversion state.
