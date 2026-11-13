@@ -24,6 +24,93 @@ from qingjian.core.common import CancelledError
 from qingjian.core.format_office import convert, supports, targets_for
 
 
+def test_macos_office_fontconfig_is_child_only_and_escapes_paths(tmp_path, monkeypatch):
+    from qingjian.core import conversion
+    monkeypatch.setattr(conversion.sys, "platform", "darwin")
+    monkeypatch.delenv("FONTCONFIG_FILE", raising=False)
+    monkeypatch.setenv("FONTCONFIG_PATH", "previous-font-path")
+    monkeypatch.setenv("QINGJIAN_USER_DATA", str(tmp_path / "用户 & 数据"))
+    engine = tmp_path / "工具 & 引擎/Contents/MacOS/soffice"
+    engine.parent.mkdir(parents=True)
+    engine.touch()
+    fonts = engine.parent.parent / "Resources/fonts/truetype"
+    fonts.mkdir(parents=True)
+    workspace = tmp_path / "转换 & 临时"
+    before = dict(os.environ)
+    environment = conversion._office_child_environment(engine, workspace)
+    assert dict(os.environ) == before
+    assert environment["FONTCONFIG_PATH"] != before["FONTCONFIG_PATH"]
+    root = ET.parse(environment["FONTCONFIG_FILE"]).getroot()
+    directories = [node.text for node in root.findall("dir")]
+    assert str(fonts.parent) in directories
+    assert str(Path("/System/Library/Fonts")) in directories
+    cache = Path(root.findtext("cachedir"))
+    assert cache == tmp_path / "用户 & 数据/cache/fontconfig"
+    assert cache.is_dir()
+    assert all(Path(node.text) != engine.parent for node in root.findall("cachedir"))
+
+
+def test_macos_office_respects_relative_explicit_fontconfig(tmp_path, monkeypatch):
+    from qingjian.core import conversion
+    monkeypatch.setattr(conversion.sys, "platform", "darwin")
+    fontconfig = tmp_path / "字体配置/fonts.conf"
+    fontconfig.parent.mkdir()
+    fontconfig.write_text("<fontconfig/>", encoding="utf-8")
+    monkeypatch.setenv("FONTCONFIG_FILE", "fonts.conf")
+    monkeypatch.setenv("FONTCONFIG_PATH", str(fontconfig.parent))
+    environment = conversion._office_child_environment(tmp_path / "soffice", tmp_path / "workspace")
+    assert environment["FONTCONFIG_FILE"] == "fonts.conf"
+    assert environment["FONTCONFIG_PATH"] == str(fontconfig.parent)
+    assert not (tmp_path / "workspace").exists()
+    assert fontconfig.read_text(encoding="utf-8") == "<fontconfig/>"
+
+
+def test_macos_office_cache_permission_failure_uses_own_workspace(tmp_path, monkeypatch):
+    from qingjian.core import conversion
+    monkeypatch.setattr(conversion.sys, "platform", "darwin")
+    monkeypatch.delenv("FONTCONFIG_FILE", raising=False)
+    cache = tmp_path / "unwritable-cache"
+    monkeypatch.setattr(conversion, "user_cache_dir", lambda: cache)
+    original = Path.mkdir
+
+    def mkdir(path, *args, **kwargs):
+        if path == cache / "fontconfig":
+            raise PermissionError("fictional read-only cache")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mkdir)
+    workspace = tmp_path / "private-conversion"
+    environment = conversion._office_child_environment(tmp_path / "soffice", workspace)
+    root = ET.parse(environment["FONTCONFIG_FILE"]).getroot()
+    assert Path(root.findtext("cachedir")) == workspace / "fontconfig/cache"
+    assert (workspace / "fontconfig/cache").is_dir()
+    assert not cache.exists()
+
+
+def test_other_platforms_leave_office_environment_unchanged(tmp_path, monkeypatch):
+    from qingjian.core import conversion
+    monkeypatch.setattr(conversion.sys, "platform", "win32")
+    before = dict(os.environ)
+    assert conversion._office_child_environment(tmp_path / "soffice", tmp_path / "workspace") is None
+    assert dict(os.environ) == before
+    assert not (tmp_path / "workspace").exists()
+
+
+def test_new_article_styles_do_not_mix_theme_and_explicit_fonts(monkeypatch):
+    from docx.oxml.ns import qn
+    from qingjian.core import web_ops
+    monkeypatch.setattr(web_ops, "default_document_font", lambda name: "Songti SC")
+    document = Document()
+    title = document.styles["Title"]
+    assert title.element.get_or_add_rPr().find(qn("w:rFonts")).get(qn("w:eastAsiaTheme"))
+    for name in ("Normal", "Title", "Heading 1"):
+        web_ops._font(document.styles[name])
+        fonts = document.styles[name].element.get_or_add_rPr().find(qn("w:rFonts"))
+        assert document.styles[name].font.name == "Songti SC"
+        assert fonts.get(qn("w:eastAsia")) == "Songti SC"
+        assert not any("theme" in key.lower() for key in fonts.attrib)
+
+
 @pytest.fixture
 def word(tmp_path):
     path = tmp_path / "办公材料.docx"
@@ -497,11 +584,31 @@ def test_native_markdown_and_epub_pdf(tmp_path):
     source.write_text("# 办公说明\n\n步骤一：添加材料。\n\n步骤二：检查结果。", encoding="utf-8")
     epub = tmp_path / "help.epub"
     convert(source, epub)
+    originals = {item: item.read_bytes() for item in (source, epub)}
     options = {"libreoffice_path": os.environ["QINGJIAN_OFFICE_TEST_ENGINE"]}
     for item in (source, epub):
         target = tmp_path / (item.suffix[1:] + ".pdf")
         convert(item, target, options)
         reader = PdfReader(target)
         text = "\n".join(page.extract_text() for page in reader.pages)
-        assert "步骤" in text
+        assert "办公说明" in "".join(text.split())
+        assert "步骤一：添加材料。" in text
+        assert "步骤二：检查结果。" in text
         reader.close()
+        import pypdfium2 as pdfium
+        document = pdfium.PdfDocument(target)
+        pdfium_text = []
+        try:
+            for page in document:
+                textpage = page.get_textpage()
+                try:
+                    pdfium_text.append(textpage.get_text_range())
+                finally:
+                    textpage.close()
+                    page.close()
+        finally:
+            document.close()
+        assert "步骤一：添加材料。" in "\n".join(pdfium_text)
+        assert "步骤二：检查结果。" in "\n".join(pdfium_text)
+        assert "办公说明" in "".join("\n".join(pdfium_text).split())
+        assert item.read_bytes() == originals[item]

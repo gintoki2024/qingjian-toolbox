@@ -5,7 +5,21 @@ preserved; no system font is copied into the distribution.
 """
 from __future__ import annotations
 
+import os
 import sys
+from pathlib import Path
+
+
+def user_cache_dir() -> Path:
+    """Keep reusable application caches outside replaceable source folders."""
+    selected = os.environ.get("QINGJIAN_USER_DATA")
+    if selected:
+        return Path(selected).expanduser() / "cache"
+    if sys.platform == "darwin":
+        return Path.home() / "Library/Caches/QingjianLocal"
+    if sys.platform == "win32":
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local") / "QingjianLocal/Cache"
+    return Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "QingjianLocal"
 
 
 def ui_font_family() -> str:

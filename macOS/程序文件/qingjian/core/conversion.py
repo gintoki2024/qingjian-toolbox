@@ -19,7 +19,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from ..platform_support import default_document_font
+from ..platform_support import default_document_font, user_cache_dir
 
 
 def _engine_candidates(root: Path) -> list[Path]:
@@ -446,6 +446,52 @@ def convert_office_to_pdf(source: Path, target: Path, options: dict | None = Non
     return _convert_office(source, target, options, {".doc", ".docx", ".rtf", ".xlsx", ".pptx"}, {".pdf"})
 
 
+def _office_child_environment(engine: Path, workspace: Path) -> dict | None:
+    """Expose installed Mac fonts to headless LibreOffice without copying them.
+
+    Recent Mac engines select the fontconfig-based headless backend, whose
+    bundled defaults can omit macOS font directories. Keep the configuration
+    private to this conversion and its persistent cache in user-owned storage.
+    An existing explicit fontconfig configuration remains authoritative.
+    """
+    if sys.platform != "darwin":
+        return None
+    environment = os.environ.copy()
+    selected = environment.get("FONTCONFIG_FILE", "")
+    if selected:
+        configured = Path(selected).expanduser()
+        candidates = [configured]
+        if not configured.is_absolute():
+            candidates.extend(Path(folder).expanduser() / configured
+                              for folder in environment.get("FONTCONFIG_PATH", "").split(os.pathsep) if folder)
+        if any(path.is_file() for path in candidates):
+            return environment
+
+    from xml.etree import ElementTree as ET
+    configuration = Path(workspace) / "fontconfig"
+    configuration.mkdir(parents=True, exist_ok=True)
+    cache = user_cache_dir() / "fontconfig"
+    try:
+        cache.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        cache = configuration / "cache"
+        cache.mkdir(parents=True, exist_ok=True)
+    directories = [Path("/System/Library/Fonts"), Path("/System/Library/Assets"),
+                   Path("/System/Library/AssetsV2"), Path("/Library/Fonts"), Path.home() / "Library/Fonts"]
+    resources = Path(engine).resolve().parent.parent / "Resources/fonts"
+    if resources.is_dir():
+        directories.append(resources)
+    fontconfig = ET.Element("fontconfig")
+    for directory in dict.fromkeys(directories):
+        ET.SubElement(fontconfig, "dir").text = str(directory)
+    ET.SubElement(fontconfig, "cachedir").text = str(cache)
+    path = configuration / "fonts.conf"
+    path.write_text('<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">\n' +
+                    ET.tostring(fontconfig, encoding="unicode"), encoding="utf-8")
+    environment.update(FONTCONFIG_FILE=str(path), FONTCONFIG_PATH=str(configuration))
+    return environment
+
+
 def _convert_office(source, target, options, source_types, target_types, *, filter_name=None, input_filter=None):
     options = options or {}
     source, target = _validate_paths(source, target, source_types, target_types)
@@ -486,6 +532,9 @@ def _convert_office(source, target, options, source_types, target_types, *, filt
             if input_filter:
                 command.insert(-1, "--infilter=" + input_filter)
             launch: dict[str, Any] = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE}
+            child_environment = _office_child_environment(engine, temporary_path)
+            if child_environment is not None:
+                launch["env"] = child_environment
             if os.name == "nt":
                 startup = subprocess.STARTUPINFO()
                 startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW

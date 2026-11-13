@@ -331,6 +331,11 @@ def _font(style):
     if fonts is None:
         fonts = OxmlElement("w:rFonts")
         rpr.insert(0, fonts)
+    # A Word template's theme font takes precedence over the explicit family.
+    # These are newly generated article styles, so retain the selected platform
+    # default rather than mixing theme fallback glyphs in exported PDFs.
+    for theme in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme", "csTheme"):
+        fonts.attrib.pop(qn("w:" + theme), None)
     fonts.set(qn("w:eastAsia"), default_document_font("宋体"))
 
 
