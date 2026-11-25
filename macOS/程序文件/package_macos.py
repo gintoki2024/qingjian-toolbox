@@ -159,7 +159,8 @@ def source_files(project: Path = PROJECT) -> list[Path]:
             relative = path.relative_to(project)
             if _is_link(path):
                 raise RuntimeError("源码不接受链接文件：" + relative.as_posix())
-            if name in GENERATED_NAMES or path.suffix.lower() in WINDOWS_SUFFIXES | ARCHIVE_SUFFIXES | {".pyc", ".pyo", ".log", ".dmp"}:
+            is_clock_bundle = relative.as_posix() == "qingjian/assets/waterclock/WaterflowClock.zip"
+            if name in GENERATED_NAMES or (not is_clock_bundle and path.suffix.lower() in WINDOWS_SUFFIXES | ARCHIVE_SUFFIXES | {".pyc", ".pyo", ".log", ".dmp"}):
                 continue
             if name.startswith(".env") or name == ".DS_Store" or not _light_support(relative):
                 continue

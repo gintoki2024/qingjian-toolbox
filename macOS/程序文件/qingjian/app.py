@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
+from .water_clock import launch_clock
 from . import __version__
 from .batch import SUPPORTED, dispatch, is_url, new_run_directory, output_path, validate_options, write_report
 from .core.conversion import find_libreoffice
@@ -445,6 +446,9 @@ class Window(QMainWindow):
         self.notebook_button.setIcon(sidebar_notebook_icon(22))
         self.notebook_button.setIconSize(QSize(22, 22))
         side_layout.addWidget(self.notebook_button)
+        self.clock_button = button("水流时钟", self.open_water_clock, "nav")
+        self.clock_button.setToolTip("打开桌面时钟与倒计时，再次点击可唤回时钟")
+        side_layout.addWidget(self.clock_button)
         side_layout.addSpacing(8)
         for key, title in (("home", "工作台"), ("catalog", "全部工具"),
                            ("presets", "常用方案"), ("history", "最近任务")):
@@ -522,6 +526,7 @@ class Window(QMainWindow):
         self.compact_menu.addAction("使用说明", self.show_help)
         self.compact_menu.addAction("转换格式与字段说明", self.show_conversion_help)
         self.compact_menu.addAction("恢复贴边小窗", self.apply_compact_geometry)
+        self.compact_menu.addAction("水流时钟", self.open_water_clock)
         self.compact_tools.setMenu(self.compact_menu)
         self.compact_history = button("记录", lambda: self.show_surface("history"), "quiet")
         self.compact_appearance = button("外观", self.show_appearance, "quiet")
@@ -2601,6 +2606,12 @@ class Window(QMainWindow):
             "文件与环境\n"
             "发布文件夹只保留启动器、使用说明和“程序文件”三项。请完整保留“程序文件/engines”；第三方许可位于“程序文件/support/licenses”。源码首次启动可选择已有 Python 或部署位置，复用满足要求的组件，只补缺失项；初始化后可离线使用。工具不上传文档；在线网页访问会连接相应网站。"
         ), conversion=True)
+
+    def open_water_clock(self):
+        try:
+            launch_clock()
+        except Exception as exc:
+            QMessageBox.warning(self, "水流时钟启动失败", str(exc))
 
     def closeEvent(self, event):
         if self._interactive_owner is not None and isValid(self._interactive_owner) and self._interactive_owner.is_busy():

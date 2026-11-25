@@ -127,6 +127,7 @@ def main():
                "--collect-data", "pptx", "--collect-all", "pillow_heif",
                "--collect-submodules", "extract_msg", "--collect-data", "tzdata",
                "--collect-data", "icalendar", "--hidden-import", "PySide6.QtSvg",
+               "--add-data", f"{project / 'qingjian/assets/waterclock/WaterflowClock.exe'};qingjian/assets/waterclock",
                "--exclude-module", "PySide6.QtWebEngineCore", "--exclude-module", "PySide6.QtQml",
                str(project / "main.py")]
     # Build hosts may expose Poppler/LibreOffice DLLs on PATH. Their versioned

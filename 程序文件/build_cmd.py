@@ -15,7 +15,7 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
 from build import verify_source_startup
-from package_source import source_files
+from package_source import WATER_CLOCK_EXE, source_files
 from bootstrap import filesystem_path
 
 PROJECT = Path(__file__).resolve().parent
@@ -169,7 +169,7 @@ def build(output, native_bundle, project=PROJECT):
     program.mkdir(parents=True)
     for src in source_files(project):
         relative = src.relative_to(project)
-        if src.suffix.lower() == '.exe' or relative.parts[0] == 'support':
+        if (src.suffix.lower() == '.exe' and relative.as_posix() != WATER_CLOCK_EXE) or relative.parts[0] == 'support':
             continue
         target = program / relative
         target.parent.mkdir(parents=True, exist_ok=True)

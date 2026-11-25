@@ -14,6 +14,7 @@ from bootstrap import DEPENDENCY_INSTALL_POLICY, load_manifest, requirements
 from build import verify_source_startup
 
 PROJECT = Path(__file__).resolve().parent
+WATER_CLOCK_EXE = "qingjian/assets/waterclock/WaterflowClock.exe"
 EXCLUDED = {"__pycache__", ".pytest_cache", ".git", ".venv", "venv", "build", "dist", "engines", ".mypy_cache"}
 ROOT_ENTRIES = {"启动青简工具箱.exe", "使用说明.txt", "程序文件"}
 
@@ -90,7 +91,7 @@ def package(project=PROJECT, output=None, *, entry_mode="exe"):
             for path in source_files(project):
                 data = path.read_bytes()
                 relative = path.relative_to(project).as_posix()
-                if entry_mode == "cmd" and path.suffix.lower() == ".exe":
+                if entry_mode == "cmd" and path.suffix.lower() == ".exe" and relative != WATER_CLOCK_EXE:
                     continue
                 # Both release types expose the same three root entries. The
                 # launcher also lives inside the source tree for direct main.py
